@@ -12,22 +12,19 @@ Get["CellsToTeX`"]
 $ContextPath =
 	Join[{"CellsToTeX`Configuration`", "CellsToTeX`Backports`"}, $ContextPath]
 
-	
-inputStyleOpts =
-	CellsToTeX`Internal`extractStyleOptions["Input", $cellStyleOptions]
 
-outputStyleOpts =
-	CellsToTeX`Internal`extractStyleOptions["Output", $cellStyleOptions]
-	
-printStyleOpts =
-	CellsToTeX`Internal`extractStyleOptions["Print", $cellStyleOptions]
-
-messageStyleOpts =
-	CellsToTeX`Internal`extractStyleOptions["Message", $cellStyleOptions]
-
-
-annotationBoxRules =
-	CellsToTeX`Internal`annotationRulesToBoxRules[$annotationTypesToTeX]
+(*	In tests we use pattern matching on contents of Association, it works since
+	Mathematica v10.4, and for backported Association for versions < 10.0,
+	but not for versions from 10.0 to 10.3, so for this versions we normalize
+	Associations. *)
+normalAssoc =
+	If[10 <= $VersionNumber < 10.4,
+		Module[{association},
+			(# /. assoc_Association :> association @@ Normal[assoc])&
+		]
+	(* else *),
+		Identity
+	]
 
 
 (* ::Section:: *)
@@ -40,15 +37,11 @@ Test[
 			MakeBoxes,
 		"Style" -> "Input",
 		"ProcessorOptions" -> {
-			"BoxRules" ->
-				getBoxesToFormattedTeX[
-					"CharacterRules" ->
-						Prepend[
-							OptionValue[
-								getBoxesToFormattedTeX, "CharacterRules"
-							],
-							"\[DifferentialD]" -> "\\(\\mathbbm{d}\\)"
-						]
+			"StringRules" ->
+				Join[
+					{"\[DifferentialD]" -> "\\(\\mathbbm{d}\\)"},
+					$stringsToTeX,
+					$commandCharsToTeX
 				]
 		},
 		"TeXOptions" -> {"morelst" -> "{morefvcmdparams=\\mathbbm 1}"}
@@ -56,7 +49,7 @@ Test[
 	,
 	"\
 \\begin{mmaCell}[morelst={morefvcmdparams=\\mathbbm 1},morefunctionlocal={y}]{Input}
-  \\mmaSubSup{\\int}{r}{\\(\\infty\\)}\\{\\mmaFrac{1}{\\mmaSup{y}{3} \\mmaSup{(1-\\mmaSup{(\\mmaFrac{a}{y})}{2})}{2}}\\}\\(\\mathbbm{d}\\)y
+  \\mmaSubSupM{\\int}{r}{\\mmaDef{\\(\\pmb{\\infty}\\)}}\\{\\mmaFrac{1}{\\mmaSup{y}{3} \\mmaSup{(1-\\mmaSup{(\\mmaFrac{a}{y})}{2})}{2}}\\}\\(\\mathbbm{d}\\)y
 \\end{mmaCell}"
 	,
 	TestID -> "pure boxes: formatting, syntax: Input"
@@ -76,6 +69,143 @@ UsingFrontEnd @ Test[
 \\end{mmaCell}"
 	,
 	TestID -> "pure boxes: formatting, syntax: Code"
+]
+
+
+Test[
+	CellToTeX[
+		RowBox[{RowBox[{"#", " ", "##", " ", "#something", " ", "##4"}], "&"}],
+		"Style" -> "Input"
+	]
+	,
+	"\
+\\begin{mmaCell}[morepattern={\\#, \\#\\#, \\#something, \\#\\#4}]{Input}
+  # ## #something ##4&
+\\end{mmaCell}"
+	,
+	TestID -> "pure boxes: pure function with slots: Input"
+]
+
+
+Block[{\[Phi]1},
+	\[Phi]1[x_] := x;
+	
+	Test[
+		CellToTeX[
+			Sum[
+				\[Phi]1[\[Alpha]]^2 + \[Chi]\[Omega]\[Nu]\[Sigma]\[Tau],
+				{\[Alpha], 1, \[Pi]}
+			] // MakeBoxes
+			,
+			"Style" -> "Input"
+		]
+		,
+		"\
+\\begin{mmaCell}{Input}
+  \\mmaUnderOver{\\(\\pmb{\\sum}\\)}{\\mmaFnc{\\(\\pmb{\\alpha}\\)}=1}{\\mmaDef{\\(\\pmb{\\pi}\\)}}(\\mmaSup{\\mmaDef{\\(\\pmb{\\phi}\\)1}[\\mmaFnc{\\(\\pmb{\\alpha}\\)}]}{2}+\\mmaUnd{\\(\\pmb{\\chi\\omega\\nu\\sigma\\tau}\\)})
+\\end{mmaCell}"
+		,
+		TestID -> "pure boxes: formatting, syntax, non-ASCII symbols: Input"
+	]
+]
+
+
+Block[{\[Phi]1},
+	\[Phi]1[x_] := x;
+	
+	UsingFrontEnd @ Test[
+		CellToTeX[
+			Sum[
+				\[Phi]1[\[Alpha]]^2 + \[Chi]\[Omega]\[Nu]\[Sigma]\[Tau],
+				{\[Alpha], 1, \[Pi]}
+			] // MakeBoxes
+			,
+			"Style" -> "Code"
+		]
+		,
+		"\
+\\begin{mmaCell}{Code}
+  Sum[\\mmaDef{\\[Phi]1}[\\mmaFnc{\\[Alpha]}]^2 + \\mmaUnd{\\[Chi]\\[Omega]\\[Nu]\\[Sigma]\\[Tau]}, {\\mmaFnc{\\[Alpha]}, 1, Pi}]
+\\end{mmaCell}"
+		,
+		TestID -> "pure boxes: formatting, syntax, non-ASCII symbols: Code"
+	]
+]
+
+
+Block[{texMathReplacement},
+	texMathReplacement["\[UnderBracket]"] = "\\textvisiblespace";
+	UsingFrontEnd @ Test[
+		CellToTeX[
+			{
+				\[Alpha]_ \[RuleDelayed] \[Alpha],
+				x \[Equal] \[Beta]\[UnderBracket]\[Gamma]
+			} // MakeBoxes
+			,
+			"Style" -> "Code",
+			"ProcessorOptions" -> {
+				"NonASCIIHandler" -> texMathReplacementRegister,
+				"CharacterEncoding" -> "Unicode"
+			}
+		]
+		,
+		"\
+\\begin{mmaCell}{Code}
+  {\\mmaPat{\[Alpha]_} :> \\mmaPat{\[Alpha]}, x == \\mmaUnd{\[Beta]\[UnderBracket]\[Gamma]}}
+\\end{mmaCell}"
+		,
+		TestID -> "pure boxes: syntax, non-ASCII symbols (private Unicode): \
+Code, Unicode encoding, math replacements"
+	];
+	Test[
+		texMathReplacement // DownValues
+		,
+		{
+			HoldPattern@texMathReplacement@"\[Alpha]" :> "\\alpha",
+			HoldPattern@texMathReplacement@"\[Beta]" :> "\\beta",
+			HoldPattern@texMathReplacement@"\[Gamma]" :> "\\gamma",
+			HoldPattern@texMathReplacement@"\[UnderBracket]" :>
+				"\\textvisiblespace"
+		}
+		,
+		TestID -> "pure boxes: syntax, non-ASCII symbols (private Unicode): \
+Code, Unicode encoding, math replacements: texMathReplacement"
+	]
+]
+
+
+Test[
+	CellToTeX[
+		BoxData[{
+			RowBox[{RowBox[{"f", "::", "usage"}], "=", "\"\<f[] gives something\>\""}],
+			"\[IndentingNewLine]",
+			RowBox[{
+				RowBox[{"f", "[", "]"}], ":=",
+				RowBox[{"Module", "[",
+					RowBox[{"(*", " ",
+						RowBox[{"A", " ", RowBox[{"comment", "."}]}],
+					" ", "*)"}],
+					RowBox[{
+						RowBox[{"{", "x", "}"}], ",",
+						RowBox[{
+							"\"\<A string\>\"", "<>",
+							RowBox[{"ToString", "[", "x", "]"}]
+						}]
+					}],
+				"]"}]
+			}]
+		}]
+		,
+		"Style" -> "Input"
+	]
+	,
+	"\
+\\begin{mmaCell}[morelocal={x}]{Input}
+  f::\\mmaStr{usage}=\"f[] gives something\"
+  f[]:=Module[(* A comment. *)\\{x\\},\"A string\"<>ToString[x]]
+\\end{mmaCell}"
+	,
+	TestID -> "BoxData: comment, string, syntax: Input"
 ]
 
 
@@ -132,7 +262,7 @@ Test[
 	,
 	"\
 \\begin{mmaCell}{Input}
-  \\mmaSub{x}{1}==\\mmaFrac{-b\\(\\pm\\)\\mmaSqrt{\\mmaSup{b}{2}-4 a c}}{2 a}
+  \\mmaSub{x}{1}==\\mmaFrac{-b\\(\\pmb{\\pm}\\)\\mmaSqrt{\\mmaSup{b}{2}-4 a c}}{2 a}
 \\end{mmaCell}"
 	,
 	TestID -> "Input cell: formatting, no syntax"
@@ -174,9 +304,9 @@ UsingFrontEnd @ Test[
 	]
 	,
 	"\
-\\begin{mmaCell}[addtoindex=3,morelocal={x, x_}]{Code}
-  Solve[a*\\mmaFnc{x} + c == 0, \\mmaFnc{x}]; 
-  Module[{x, \\mmaLoc{a}}, x_ = x \\[PlusMinus] 1]
+\\begin{mmaCell}[addtoindex=3,morefunctionlocal={x},morelocal={x_}]{Code}
+  Solve[a*x + c == 0, x]; 
+  Module[{\\mmaLoc{x}, \\mmaLoc{a}}, x_ = \\mmaLoc{x} \\[PlusMinus] 1]
 \\end{mmaCell}"
 	,
 	TestID -> "Code cell: no formatting, different syntax roles, index"
@@ -254,106 +384,92 @@ Block[{boxes, Export = Composition[First, List]},
 (*Exceptions*)
 
 
-Test[
-	CellToTeX[Cell[BoxData["contents"]]]
-	,
-	Failure[CellsToTeXException["Missing", "CellStyle"],
-		Association[
-			"MessageTemplate" :> CellsToTeXException::missingCellStyle,
-			"MessageParameters" -> {
+With[
+	{
+		heldMessage =
+			HoldForm @ Message[CellsToTeXException::missingCellStyle,
 				HoldForm @ CellToTeX[Cell[BoxData["contents"]]],
 				HoldForm @ CellsToTeXException["Missing", "CellStyle"],
 				HoldForm @ Cell[BoxData["contents"]]
-			}
-		]
-	]
+			]
+	}
 	,
-	Message[CellsToTeXException::missingCellStyle,
-		CellToTeX[Cell[BoxData["contents"]]],
-		CellsToTeXException["Missing", "CellStyle"],
-		Cell[BoxData["contents"]]
+	TestMatch[
+		CellToTeX[Cell[BoxData["contents"]]] // normalAssoc
+		,
+		Failure[CellsToTeXException,
+			Association[
+				"MessageTemplate" :> CellsToTeXException::missingCellStyle,
+				"MessageParameters" -> (List @@@ heldMessage)[[1, 2;;]],
+				"Type" -> {"Missing", "CellStyle"}
+			]
+		] // normalAssoc
+		,
+		{heldMessage}
+		,
+		TestID -> "Exception: Missing CellStyle: Cell"
 	]
-	,
-	TestID -> "Exception: Missing CellStyle: Cell"
 ]
 
-Test[
-	CellToTeX[Cell[BoxData["contents"], "testUnsupportedStyle"]]
-	,
-	Failure[CellsToTeXException["Unsupported", "CellStyle"],
-		Association[
-			"MessageTemplate" :> CellsToTeXException::unsupported,
-			"MessageParameters" -> {
+With[
+	{
+		heldMessage =
+			HoldForm @ Message[CellsToTeXException::unsupported,
 				HoldForm @ CellToTeX @
 					Cell[BoxData["contents"], "testUnsupportedStyle"],
 				HoldForm @ CellsToTeXException["Unsupported", "CellStyle"],
 				HoldForm @ "CellStyle",
 				HoldForm @ "testUnsupportedStyle",
-				HoldForm["Code" | "Input" | "Output" | "Print" | "Message"]
-			}
-		]
-	]
+				HoldForm @
+					Verbatim["Code" | "Input" | "Output" | "Print" | "Message"]
+			]
+	}
 	,
-	Message[CellsToTeXException::unsupported,
-		CellToTeX @ Cell[BoxData["contents"], "testUnsupportedStyle"],
-		CellsToTeXException["Unsupported", "CellStyle"],
-		"CellStyle",
-		"testUnsupportedStyle",
-		Verbatim["Code" | "Input" | "Output" | "Print" | "Message"]
+	TestMatch[
+		CellToTeX[Cell[BoxData["contents"], "testUnsupportedStyle"]] //
+			normalAssoc
+		,
+		Failure[CellsToTeXException,
+			Association[
+				"MessageTemplate" :> CellsToTeXException::unsupported,
+				"MessageParameters" -> (List @@@ heldMessage)[[1, 2;;]],
+				"Type" -> {"Unsupported", "CellStyle"}
+			]
+		] // normalAssoc
+		,
+		{heldMessage}
+		,
+		TestID -> "Exception: Unsupported CellStyle: Cell"
 	]
-	,
-	TestID -> "Exception: Unsupported CellStyle: Cell"
 ]
 
 With[
 	{
-		data = {
-			"Boxes" -> Cell["contents", "Input"],
-			"BoxRules" -> Join[annotationBoxRules, getBoxesToFormattedTeX[]],
-			"TeXOptions" -> {},
-			{
-				"TeXOptions" -> {},
-				"Indexed" -> True,
-				"Intype" -> True,
-				"CellIndex" -> 4,
-				{
-					"Boxes" -> Cell["contents", "Input"],
-					"Style" -> "Input",
-					"ProcessorOptions" -> {"FormatType" -> testFormatType},
-					{"FormatType" -> testFormatType},
-					inputStyleOpts,
-					Options[CellToTeX]
-				}
-			}
-		}
-	},
-	Test[
+		heldMessage =
+			HoldForm @ Message[CellsToTeXException::unsupported,
+				HoldForm @ boxesToTeXProcessor[OptionsPattern[]],
+				HoldForm @ CellsToTeXException["Unsupported", "FormatType"],
+				HoldForm @ "FormatType",
+				HoldForm @ testFormatType,
+				HoldForm @ {InputForm, OutputForm}
+			]
+	}
+	,
+	TestMatch[
 		CellToTeX[
 			Cell["contents", "Input"],
 			"ProcessorOptions" -> {"FormatType" -> testFormatType}
-		]
+		] // normalAssoc
 		,
-		Failure[CellsToTeXException["Unsupported", "FormatType"],
+		Failure[CellsToTeXException,
 			Association[
 				"MessageTemplate" :> CellsToTeXException::unsupported,
-				"MessageParameters" -> {
-					HoldForm @ mmaCellProcessor[data],
-					HoldForm @
-						CellsToTeXException["Unsupported", "FormatType"],
-					HoldForm @ "FormatType",
-					HoldForm @ testFormatType,
-					HoldForm @ {InputForm, OutputForm}
-				}
+				"MessageParameters" -> (List @@@ heldMessage)[[1, 2;;]],
+				"Type" -> {"Unsupported", "FormatType"}
 			]
-		]
+		] // normalAssoc
 		,
-		Message[CellsToTeXException::unsupported,
-			mmaCellProcessor[Verbatim[data]],
-			CellsToTeXException["Unsupported", "FormatType"],
-			"FormatType",
-			testFormatType,
-			{InputForm, OutputForm}
-		]
+		{heldMessage}
 		,
 		TestID -> "Exception: Unsupported FormatType: Cell"
 	]
@@ -361,50 +477,32 @@ With[
 
 With[
 	{
-		data = {
-			"TeXOptions" -> {},
-			"Indexed" -> True,
-			"Intype" -> False,
-			"CellIndex" -> 4,
-			{
-				"Boxes" -> BoxData[testUnsupportedBox],
-				"Style" -> "Output",
-				"Style" -> "Output",
-				"ProcessorOptions" ->
-					{"BoxRules" -> {testSupportedBox[b_] :> b}},
-				{"BoxRules" -> {testSupportedBox[b_] :> b}},
-				outputStyleOpts,
-				Options[CellToTeX]
-			}
-		}
-	},
-	Test[
+		heldMessage =
+			HoldForm @ Message[CellsToTeXException::unsupported,
+				HoldForm @ boxesToTeXProcessor[OptionsPattern[]],
+				HoldForm @ CellsToTeXException["Unsupported", "Box"],
+				HoldForm @ "Box",
+				HoldForm @ testUnsupportedBox,
+				HoldForm @ {testSupportedBox[Verbatim[_]], Verbatim[_String]}
+			]
+	}
+	,
+	TestMatch[
 		CellToTeX[
 			BoxData[testUnsupportedBox],
 			"Style" -> "Output",
 			"ProcessorOptions" -> {"BoxRules" -> {testSupportedBox[b_] :> b}}
-		]
+		] // normalAssoc
 		,
-		Failure[CellsToTeXException["Unsupported", "Box"],
+		Failure[CellsToTeXException,
 			Association[
 				"MessageTemplate" :> CellsToTeXException::unsupported,
-				"MessageParameters" -> {
-					HoldForm @ mmaCellProcessor[data],
-					HoldForm @ CellsToTeXException["Unsupported", "Box"],
-					HoldForm @ "Box",
-					HoldForm @ testUnsupportedBox,
-					HoldForm @ {testSupportedBox[_]}
-				}
+				"MessageParameters" -> (List @@@ heldMessage)[[1, 2;;]],
+				"Type" -> {"Unsupported", "Box"}
 			]
-		]
+		] // normalAssoc
 		,
-		Message[CellsToTeXException::unsupported,
-			mmaCellProcessor[data],
-			CellsToTeXException["Unsupported", "Box"],
-			"Box",
-			testUnsupportedBox,
-			{testSupportedBox[Verbatim[_]]}
-		]
+		{heldMessage}
 		,
 		TestID -> "Exception: Unsupported Box: BoxData"
 	]
@@ -419,49 +517,33 @@ Block[
 	},
 	With[
 		{
-			data = {
-				"TeXOptions" -> {},
-				"Indexed" -> True,
-				"Intype" -> True,
-				"CellIndex" -> 4,
-				{
-					"Boxes" -> BoxData[RowBox[{"testUndefinedSymbol"}]],
-					"Style" -> "Input",
-					"Style" -> "Input",
-					{},
-					inputStyleOpts,
-					Options[CellToTeX]
-				}
-			}
-		},
-		Test[
+			heldMessage =
+				HoldForm @ Message[CellsToTeXException::unsupported,
+					HoldForm @ annotateSyntaxProcessor[OptionsPattern[]],
+					HoldForm @ CellsToTeXException[
+						"Unsupported", "AnnotationType"
+					],
+					HoldForm @ "AnnotationType",
+					HoldForm @ "UndefinedSymbol",
+					HoldForm @ {"testSupportedAnnotation"}
+				]
+		}
+		,
+		TestMatch[
 			CellToTeX[
 				BoxData[RowBox[{"testUndefinedSymbol"}]],
 				"Style" -> "Input"
-			]
+			] // normalAssoc
 			,
-			Failure[CellsToTeXException["Unsupported", "AnnotationType"],
+			Failure[CellsToTeXException,
 				Association[
 					"MessageTemplate" :> CellsToTeXException::unsupported,
-					"MessageParameters" -> {
-						HoldForm @ annotateSyntaxProcessor[data],
-						HoldForm @ CellsToTeXException[
-							"Unsupported", "AnnotationType"
-						],
-						HoldForm @ "AnnotationType",
-						HoldForm @ "UndefinedSymbol",
-						HoldForm @ {"testSupportedAnnotation"}
-					}
+					"MessageParameters" -> (List @@@ heldMessage)[[1, 2;;]],
+					"Type" -> {"Unsupported", "AnnotationType"}
 				]
-			]
+			] // normalAssoc
 			,
-			Message[CellsToTeXException::unsupported,
-				annotateSyntaxProcessor[data],
-				CellsToTeXException["Unsupported", "AnnotationType"],
-				"AnnotationType",
-				"UndefinedSymbol",
-				{"testSupportedAnnotation"}
-			]
+			{heldMessage}
 			,
 			TestID -> "Exception: Unsupported AnnotationType: BoxData"
 		]
@@ -472,32 +554,17 @@ Block[
 SetOptions[CellToTeX, "PreviousIntype" -> True, "CurrentCellIndex" -> 10]
 With[
 	{
-		data = {
-			"TeXOptions" -> {"addtoindex" -> -8},
-			"Indexed" -> True,
-			"Intype" -> False,
-			"CellIndex" -> 2,
-			{
-				{
-					"Boxes" -> Cell[
-						BoxData[testUnsupportedBox],
-						"Output",
-						CellLabel -> "Out[2]=",
-						ShowCellLabel -> True
-					],
-					"Style" -> "Output",
-					"ProcessorOptions" ->
-						{"BoxRules" -> {testSupportedBox -> ""}},
-					{"BoxRules" -> {testSupportedBox -> ""}},
-					outputStyleOpts,
-					Options[CellToTeX]
-				},
-				{CellLabel -> "Out[2]=", ShowCellLabel -> True}
-			}
-		}
+		heldMessage =
+			HoldForm @ Message[CellsToTeXException::unsupported,
+				HoldForm @ boxesToTeXProcessor[OptionsPattern[]],
+				HoldForm @ CellsToTeXException["Unsupported", "Box"],
+				HoldForm @ "Box",
+				HoldForm @ testUnsupportedBox,
+				HoldForm @ {testSupportedBox, Verbatim[_String]}
+			]
 	}
 	,
-	Test[
+	TestMatch[
 		CellToTeX[
 			Cell[
 				BoxData[testUnsupportedBox],
@@ -506,28 +573,17 @@ With[
 				ShowCellLabel -> True
 			],
 			"ProcessorOptions" -> {"BoxRules" -> {testSupportedBox -> ""}}
-		]
+		] // normalAssoc
 		,
-		Failure[CellsToTeXException["Unsupported", "Box"],
+		Failure[CellsToTeXException,
 			Association[
 				"MessageTemplate" :> CellsToTeXException::unsupported,
-				"MessageParameters" -> {
-					HoldForm @ mmaCellProcessor[data],
-					HoldForm @ CellsToTeXException["Unsupported", "Box"],
-					HoldForm @ "Box",
-					HoldForm @ testUnsupportedBox,
-					HoldForm @ {testSupportedBox}
-				}
+				"MessageParameters" -> (List @@@ heldMessage)[[1, 2;;]],
+				"Type" -> {"Unsupported", "Box"}
 			]
-		]
+		] // normalAssoc
 		,
-		Message[CellsToTeXException::unsupported,
-			mmaCellProcessor[data],
-			CellsToTeXException["Unsupported", "Box"],
-			"Box",
-			testUnsupportedBox,
-			{testSupportedBox}
-		]
+		{heldMessage}
 		,
 		TestID -> "Exception: Unsupported Box: Cell"
 	]
@@ -550,51 +606,40 @@ Test[
 
 With[
 	{
-		data = {
-			"Boxes" -> Cell[BoxData["contents"], "Print"],
-			"Style" -> "Print",
-			"Processor" -> trackCellIndexProcessor,
-			{},
-			printStyleOpts,
-			Options[CellToTeX]
-		},
-		dataKeys = {
-			"Boxes", "Style", "Processor", "BoxRules", "CharacterEncoding",
-			"FormatType", "Indexed", "Intype", "CellLabel",
-			"SupportedCellStyles", "CellStyleOptions", "ProcessorOptions",
-			"TeXOptions", "CatchExceptions", "CurrentCellIndex",
-			"PreviousIntype"
-		}
+		heldMessage =
+			HoldForm @ Message[CellsToTeXException::missingProcArg,
+				HoldForm @ trackCellIndexProcessor[OptionsPattern[]],
+				HoldForm @ CellsToTeXException[
+					"Missing", "Keys", "ProcessorArgument"
+				],
+				HoldForm @ "Keys",
+				HoldForm @ {"CellIndex"},
+				HoldForm @ {
+					"Boxes", "Style", "Processor", "BoxRules", "StringRules",
+					"NonASCIIHandler", "CharacterEncoding", "FormatType",
+					"TeXCodeSimplifier", "Indexed", "Intype", "CellLabel",
+					"SupportedCellStyles", "CellStyleOptions",
+					"ProcessorOptions", "TeXOptions", "CatchExceptions",
+					"CurrentCellIndex", "PreviousIntype"
+				}
+			]
 	}
 	,
-	Test[
+	TestMatch[
 		CellToTeX[
 			Cell[BoxData["contents"], "Print"],
 			"Processor" -> trackCellIndexProcessor
-		]
+		] // normalAssoc
 		,
-		Failure[CellsToTeXException["Missing", "Keys", "ProcessorArgument"],
+		Failure[CellsToTeXException,
 			Association[
 				"MessageTemplate" :> CellsToTeXException::missingProcArg,
-				"MessageParameters" -> {
-					HoldForm @ trackCellIndexProcessor[data],
-					HoldForm @ CellsToTeXException[
-						"Missing", "Keys", "ProcessorArgument"
-					],
-					HoldForm @ "Keys",
-					HoldForm @ {"CellIndex"},
-					HoldForm @ dataKeys
-				}
+				"MessageParameters" -> (List @@@ heldMessage)[[1, 2;;]],
+				"Type" -> {"Missing", "Keys", "ProcessorArgument"}
 			]
-		]
+		] // normalAssoc
 		,
-		Message[CellsToTeXException::missingProcArg,
-			trackCellIndexProcessor[data],
-			CellsToTeXException["Missing", "Keys", "ProcessorArgument"],
-			"Keys",
-			{"CellIndex"},
-			dataKeys
-		]
+		{heldMessage}
 		,
 		TestID -> "Exception: missing data in Processor"
 	]
@@ -603,51 +648,44 @@ With[
 
 With[
 	{
-		dataKeys = {
-			"Boxes", "Style", "Processor", "BoxRules", "CharacterEncoding",
-			"FormatType", "Indexed", "Intype", "CellLabel",
-			"SupportedCellStyles", "CellStyleOptions", "ProcessorOptions",
-			"TeXOptions", "CatchExceptions", "CurrentCellIndex",
-			"PreviousIntype"
-		}
+		heldMessage =
+			HoldForm @ Message[CellsToTeXException::missingProcRes,
+				HoldForm @ CellToTeX[
+					Cell[BoxData["contents"], "Message"],
+					"Processor" -> Identity
+				],
+				HoldForm @ CellsToTeXException[
+					"Missing", "Keys", "ProcessorResult"
+				],
+				HoldForm @ "Keys",
+				HoldForm @ {"TeXCode"},
+				HoldForm @ {
+					"Boxes", "Style", "Processor", "BoxRules", "StringRules",
+					"NonASCIIHandler", "CharacterEncoding", "FormatType",
+					"TeXCodeSimplifier", "Indexed", "Intype", "CellLabel",
+					"SupportedCellStyles", "CellStyleOptions",
+					"ProcessorOptions", "TeXOptions", "CatchExceptions",
+					"CurrentCellIndex", "PreviousIntype"
+				},
+				HoldForm @ Identity
+			]
 	}
 	,
 	Test[
 		CellToTeX[
 			Cell[BoxData["contents"], "Message"],
 			"Processor" -> Identity
-		]
+		] // normalAssoc
 		,
-		Failure[CellsToTeXException["Missing", "Keys", "ProcessorResult"],
+		Failure[CellsToTeXException,
 			Association[
 				"MessageTemplate" :> CellsToTeXException::missingProcRes,
-				"MessageParameters" -> {
-					HoldForm @ CellToTeX[
-						Cell[BoxData["contents"], "Message"],
-						"Processor" -> Identity
-					],
-					HoldForm @ CellsToTeXException[
-						"Missing", "Keys", "ProcessorResult"
-					],
-					HoldForm @ "Keys",
-					HoldForm @ {"TeXCode"},
-					HoldForm @ dataKeys,
-					HoldForm @ Identity
-				}
+				"MessageParameters" -> (List @@@ heldMessage)[[1, 2;;]],
+				"Type" -> {"Missing", "Keys", "ProcessorResult"}
 			]
-		]
+		] // normalAssoc
 		,
-		Message[CellsToTeXException::missingProcRes,
-			CellToTeX[
-				Cell[BoxData["contents"], "Message"],
-				"Processor" -> Identity
-			],
-			CellsToTeXException["Missing", "Keys", "ProcessorResult"],
-			"Keys",
-			{"TeXCode"},
-			dataKeys,
-			Identity
-		]
+		{heldMessage}
 		,
 		TestID -> "Exception: missing TeXCode in data returned by Processor"
 	]

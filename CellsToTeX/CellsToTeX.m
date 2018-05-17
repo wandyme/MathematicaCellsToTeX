@@ -22,6 +22,13 @@ returns String with TeX code representing given cell. Returned TeX code \
 contains converted cell contents and data extracted from Cell options."
 
 
+CellsToTeXPreamble::usage =
+"\
+CellsToTeXPreamble[] \
+returns String with TeX code setting global properties of mmacells package, \
+suitable for inclusion in document preamble."
+
+
 CellsToTeXException::usage =
 "\
 CellsToTeXException \
@@ -58,7 +65,7 @@ $cellStyleOptions \
 is a List of rules with left hand sides being Lists of two elements. First \
 element is a pattern matching particular cell styles, second element is \
 option name. Right hand sides of rules are default values of options that \
-will be used for styles mathcing said pattern."
+will be used for styles matching said pattern."
 
 
 $commandCharsToTeX::usage =
@@ -92,25 +99,26 @@ $boxHeadsToTeXCommands::usage =
 "\
 $boxHeadsToTeXCommands \
 is a List of rules assigning TeX command specifications to box heads. \
-Right hand side of rules can be a String with TeX command name or List of two \
-elements with first being TeX command name and second being positions of \
-command argumnets that, in TeX, will be typeset in math mode."
+Right hand side of rules can be a List of two elements with first being a \
+String with TeX command name and second being number of arguments of TeX \
+command."
 
 
-$charsToTeX::usage =
+$stringsToTeX::usage =
 "\
-$charsToTeX \
-is a List of rules transforming characters to TeX suitable for inclusion in \
-formatted TeX verbatim code."
+$stringsToTeX \
+is a List of rules transforming string fragments to TeX suitable for \
+inclusion in formatted TeX verbatim code."
 
 
 $annotationTypesToTeX::usage =
 "\
 $annotationTypesToTeX \
 is List of rules with left hand sides being String with annotation type and \
-right hand sides being pairs of strings. First element of pair is key used in \
-TeX mmaCell optional argument, second element is TeX command used to annotate \
-verbatim code."
+right hand sides being lists of two elements. First element of pair is a \
+String with key used in TeX mmaCell optional argument, or None if there's no \
+key associated with annotation type. Second element is String with TeX \
+command used to annotate verbatim code."
 
 
 $currentValueObj::usage =
@@ -124,13 +132,15 @@ extracting styles needed for conversion of some boxes."
 (*Utilities*)
 
 
-getBoxesToFormattedTeX::usage =
+headRulesToBoxRules::usage =
 "\
-getBoxesToFormattedTeX[] \
-returns List of rules transforming boxes to formatted TeX verbatim code. \
-By default returned rules include $linearBoxesToTeX, $boxesToFormattedTeX and \
-rules automatically generated from $boxHeadsToTeXCommands, $charsToTeX and \
-$commandCharsToTeX."
+headRulesToBoxRules[head -> {\"name\", argsNo}] \
+returns delayed rule that transforms box expression, with given head, to TeX \
+formatting command with given name. Box can contain argsNo arguments and \
+options.\
+
+headRulesToBoxRules[{rule1, rule2, ...}] \
+returns List of transformed rules."
 
 
 defaultAnnotationType::usage =
@@ -138,6 +148,20 @@ defaultAnnotationType::usage =
 defaultAnnotationType[sym] or defaultAnnotationType[\"name\"] \
 returns String with default syntax annotation type of given symbol sym \
 or of symbol with given \"name\"."
+
+
+texMathReplacement::usage =
+"\
+texMathReplacement[\"str\"] \
+returns String with TeX code representing given String \"str\". By default \
+DownValues of texMathReplacement are used by CellsToTeXPreamble."
+
+
+texMathReplacementRegister::usage =
+"\
+texMathReplacementRegister[\"str\"] \
+defines TeX code math replacement for given String \"str\", if it's not \
+already defined. Returns  \"str\"."
 
 
 makeString::usage =
@@ -184,6 +208,12 @@ processorDataLookup[processorCall, data, {key1, key2, ...}] \
 returns List of values associated with given keys, if all of them are in \
 given data. Otherwise throws \
 CellsToTeXException[\"Missing\", \"Keys\", \"ProcessorArgument\"]."
+
+
+syntaxBox::usage =
+"\
+syntaxBox[boxes, type] \
+represents boxes that in an expression perform sytnax role of given type."
 
 
 (* ::Subsubsection:: *)
@@ -273,23 +303,45 @@ If \"Boxes\" or \"TeXOptions\" key is not present \
 CellsToTeXException[\"Missing\", \"Keys\", \"ProcessorArgument\"] is thrown."
 
 
-mmaCellProcessor::usage =
+boxRulesProcessor::usage =
 "\
-mmaCellProcessor[{\
-\"Boxes\" -> boxes, \"Style\" -> style, \"TeXOptions\" -> texOptions, \
-\"BoxRules\" -> boxRules, \"Indentation\" -> indentation, ...\
+boxRulesProcessor[{\
+\"BoxRules\" -> boxRules, \"StringRules\" -> stringRules, \
+\"NonASCIIHandler\" -> nonASCIIHandler, ...\
 }] \
-returns List of given options with \"TeXCode\" option added. This option's \
-value is a String with TeX mmaCell environment with given style and \
-texOptions, containing representation of given boxes obtained by applying \
-given boxRules. Contents of mmaCell environment are indented using given \
-indentation.\
+returns List of given options with following modifications. If \
+nonASCIIHandler is not Identity, \"StringRules\" have appended rule \
+converting non-ASCII characters using nonASCIIHandler. If after modification \
+\"StringRules\" are not empty, \"BoxRules\" have appended rule replaceing \
+string using \"StringRules\"."
 
-If \"Boxes\", \"Style\" or \"TeXOptions\" key is not present \
+
+boxesToTeXProcessor::usage =
+"\
+boxesToTeXProcessor[{\"Boxes\" -> boxes, \"BoxRules\" -> boxRules,  ...}] \
+returns List of given options with \"TeXCode\" option added. This option's \
+value is a String with TeX representation of given boxes obtained by applying \
+given boxRules.\
+
+If \"Boxes\" key is not present \
 CellsToTeXException[\"Missing\", \"Keys\", \"ProcessorArgument\"] is thrown.\
 
 If boxes contain box not covered by boxRules, then \
 CellsToTeXException[\"Unsupported\", \"Box\"] is thrown."
+
+
+mmaCellProcessor::usage =
+"\
+mmaCellProcessor[{\
+\"TeXCode\" -> texCode, \"Style\" -> style, \"TeXOptions\" -> texOptions, \
+\"Indentation\" -> indentation, ...\
+}] \
+returns List of given options with \"TeXCode\" option modified. Its lines are \
+indented using given indentation and whole code is wrapped with TeX mmaCell \
+environment with given style and texOptions.\
+
+If \"TeXCode\", \"Style\" or \"TeXOptions\" key is not present \
+CellsToTeXException[\"Missing\", \"Keys\", \"ProcessorArgument\"] is thrown."
 
 
 exportProcessor::usage =
@@ -339,6 +391,19 @@ Begin["`Internal`"]
 
 
 ClearAll["`*"]
+
+
+$texEscape::usage =
+"\
+$texEscape \
+is a String used to escape a character in non-verbatim TeX code."
+
+
+$texSpecialChars::usage =
+"\
+$texSpecialChars \
+is a string pattern matching characters that need to be escaped in \
+non-verbatim TeX code."
 
 
 throwException::usage =
@@ -436,27 +501,22 @@ If value of FormatType option is different than InputForm and OutputForm \
 CellsToTeXException[\"Unsupported\", \"FormatType\"] is thrown."
 
 
-removeMathMode::usage =
+defaultOrFirst::usage =
 "\
-removeMathMode[str] \
-returns String str with removed outer math mode delimiters, if they were \
-present."
-
-
-headRulesToBoxRules::usage =
-"\
-headRulesToBoxRules[{head1 -> name1, head2 -> {name2, mathArgPos2}, ...] \
-returns List of delayed rules that transform boxes with given heads to TeX \
-formatting commands with given names. If righ hand side of rule is a List \
-it's first argument is used as TeX command name and second as positions of \
-arguments that in TeX will be typeset in math mode."
+defaultOrFirst[list, default] \
+returns default if it's member of given list, otherwise first element of list \
+is returned. Given list should have at least one element."
 
 
 commonestAnnotationTypes::usage =
 "\
-commonestAnnotationTypes[boxes] \
-returns List of rules with left hand sides being symbol names and right hand \
-sides being most common annotation types of those symbols in given boxes."
+commonestAnnotationTypes[boxes, allowedTypes, specialChars] \
+returns List of rules with left hand sides being strings and right hand sides \
+being most common annotation types of those strings in given boxes. \
+Only annotation types matching allowedTypes are taken into consideration when \
+determining commonest annotation types. If specialChars is True all strings \
+in boxes are inspected, if it's False only those composed of ASCII characters \
+are inspected."
 
 
 annotationTypesToKeyVal::usage =
@@ -470,7 +530,7 @@ representing syntax coloring."
 annotationRulesToBoxRules::usage =
 "\
 annotationRulesToBoxRules[{type1 -> {key1, command1}, ...}] \
-returns List of delayed rules that transform SyntaxBox with given typei to \
+returns List of delayed rules that transform syntaxBox with given typei to \
 TeX commandi."
 
 
@@ -506,6 +566,22 @@ returns String with given rules transformed to TeX key-value pairs.\
 
 optionsToTeX[pre, {key1 -> val1, key2 :> val2, ...}, post] \
 wraps result with pre and post, if result is not empty."
+
+
+mergeAdjacentTeXDelims::usage =
+"\
+mergeAdjacentTeXDelims[startDelim, endDelim][texCode] \
+returns String with given texCode in which code fragments, delimited by \
+startDelim and endDelim, separated only by tabs or spaces, are merged \
+together."
+
+
+mergeAdjacentTeXCommands::usage =
+"\
+mergeAdjacentTeXCommands[cmd, argStart, argEnd][texCode] \
+returns String with given texCode in which occurences of commands cmd with \
+single arguments, separated only by tabs or spaces, are merged into one \
+command."
 
 
 templateBoxDisplayBoxes::usage =
@@ -583,6 +659,26 @@ ClearAll["`*"]
 
 
 If[$VersionNumber < 10,
+	FirstCase::usage = "\
+FirstCase[{e1, e2, ...}, pattern] \
+gives the first ei to match pattern, or Missing[\"NotFound\"] if none \
+matching pattern is found.\
+
+FirstCase[{e1, e2, ...}, pattern -> rhs] \
+gives the value of rhs corresponding to the first ei to match pattern.\
+
+FirstCase[expr, pattern, default] \
+gives default if no element matching pattern is found.\
+
+FirstCase[expr, pattern, default, levelspec] \
+finds only objects that appear on levels specified by levelspec.\
+
+FirstCase[pattern] \
+represents an operator form of FirstCase that can be applied to an expression.\
+
+This is a backport of FirstCase from Mathematica versions >= 10.";
+
+
 	Association::usage = "\
 Association[key1 -> val1, key2 :> val2, ...] \
 is a very limited backport of Association from Mathematica version 10.\
@@ -750,6 +846,27 @@ addIncorrectArgsDefinition /@
 
 
 (* ::Subsubsection:: *)
+(*FirstCase*)
+
+
+If[$VersionNumber < 10,
+	SetAttributes[FirstCase, HoldRest];
+	
+	Options[FirstCase] = Options[Cases];
+	
+	FirstCase[
+		expr_, pattOrRule_, Shortest[default_:Missing["NotFound"], 1],
+		Shortest[levelspec_:{1}, 2], opts:OptionsPattern[]
+	] :=
+		Replace[Cases[expr, pattOrRule, levelspec, 1, opts],
+			{{} :> default, {match_} :> match}
+		];
+	
+	FirstCase[pattOrRule_][expr_] := FirstCase[expr, pattOrRule]
+]
+
+
+(* ::Subsubsection:: *)
 (*Association*)
 
 
@@ -758,22 +875,11 @@ If[$VersionNumber < 10,
 	
 	
 	Association /: Extract[
-		assoc_Association, fullKey:(Key[key_] | key_String)
+		assoc_Association, fullKey:(Key[key_] | key_String), head_:Identity
 	] :=
-		Lookup[assoc, key, Missing["KeyAbsent", fullKey]];
-	
-	Association /: Extract[
-		Association[rules___], fullKey:(Key[key_] | key_String), head_
-	] :=
-		head @@ Replace[key,
-			Append[
-				Replace[
-					Flatten[{rules}],
-					_[lhs_, rhs_] :> Verbatim[lhs] -> HoldComplete[rhs],
-					{1}
-				],
-				_ -> HoldComplete[Missing["KeyAbsent", fullKey]]
-			]
+		FirstCase[assoc,
+			_[Verbatim[key], val_] :> head@val,
+			head@Missing["KeyAbsent", fullKey]
 		];
 	
 	
@@ -809,11 +915,7 @@ If[$VersionNumber < 10,
 	SetAttributes[Lookup, HoldAllComplete];
 	
 	Lookup[assoc_?AssociationQ, key_, default_] :=
-		Replace[key,
-			(* MapAt[Verbatim, Flatten[{rules}], {All, 1}]
-				doesn't work in v8. *)
-			Append[MapAt[Verbatim, #, {1}]& /@ (List @@ assoc), _ :> default]
-		];
+		FirstCase[assoc, _[Verbatim[key], val_] :> val, default];
 	
 	Lookup[assoc_?AssociationQ, key_] :=
 		Lookup[assoc, key, Missing["KeyAbsent", key]]
@@ -829,7 +931,8 @@ If[$VersionNumber < 10,
 		With[
 			{
 				msg = assoc["MessageTemplate"], 
-				msgParam = assoc["MessageParameters"]
+				msgParam = assoc["MessageParameters"], 
+				type = assoc["Type"]
 			}
 			, 
 			ToBoxes @ Interpretation[
@@ -838,18 +941,30 @@ If[$VersionNumber < 10,
 						{
 							Style["\[WarningSign]", "Message", FontSize -> 35]
 							,
-							"Message: " <> ToString[
+							Style["Message:", FontColor->GrayLevel[0.5]]
+							,
+							ToString[
 								StringForm[msg, Sequence @@ msgParam], 
 								StandardForm
 							]
 						},
-						{SpanFromAbove, "Tag:" <> ToString[tag, StandardForm]}
+						{
+							SpanFromAbove,
+							Style["Tag:", FontColor->GrayLevel[0.5]],
+							ToString[tag, StandardForm]
+						},
+						{
+							SpanFromAbove,
+							Style["Type:", FontColor->GrayLevel[0.5]],
+							ToString[type, StandardForm]
+						}
 					}, 
 					Alignment -> {Left, Top}
 				],
 				Failure[tag, assoc]
 			] /; msg =!= Missing["KeyAbsent", "MessageTemplate"] && 
-					msgParam =!= Missing["KeyAbsent", "MessageParameters"]
+				msgParam =!= Missing["KeyAbsent", "MessageParameters"] && 
+				msgParam =!= Missing["KeyAbsent", "Type"]
 		]
 ]
 
@@ -873,6 +988,20 @@ Protect @ Evaluate @ Names[
 
 addIncorrectArgsDefinition /@
 	Names["CellsToTeX`Internal`" ~~ Except["$"] ~~ Except["`"]...]
+
+
+(* ::Subsubsection:: *)
+(*$texEscape*)
+
+
+$texEscape = "\\"
+
+
+(* ::Subsubsection:: *)
+(*$texSpecialChars*)
+
+
+$texSpecialChars = "#" | "%" | "{" | "}" | "\\"
 
 
 (* ::Subsubsection:: *)
@@ -948,12 +1077,13 @@ throwException[
 		}
 		,
 		Throw[
-			Failure[tag,
+			Failure[CellsToTeXException,
 				Association[
 					"MessageTemplate" :>
 						MessageName[CellsToTeXException, messageName],
 					"MessageParameters" ->
-						List @@ HoldForm /@ HoldComplete[thrownBy, tag, vals]
+						List @@ HoldForm /@ HoldComplete[thrownBy, tag, vals],
+					"Type" -> {types, type}
 				]
 			],
 			tag
@@ -971,19 +1101,20 @@ handleException[
 ] :=
 	With[
 		{
-			unevaluatedMsgName =
-				Extract[assoc, "MessageTemplate", Unevaluated], 
-			msgParam =
-				Lookup[
-					assoc, "MessageParameters",
-					{HoldForm["Unknown"], HoldForm[tag]}
-				]
+			heldMsgName =
+				Quiet[Extract[assoc, "MessageTemplate", Hold], Extract::keyw]
 		}
 		,
 		(
-			Message[unevaluatedMsgName, Sequence @@ msgParam];
+			Message @@ Join[
+				heldMsgName,
+				Hold @@ Lookup[
+					assoc, "MessageParameters",
+					{HoldForm["Unknown"], HoldForm[tag]}
+				]
+			];
 			failure
-		) /; unevaluatedMsgName =!= Missing["KeyAbsent", "MessageTemplate"]
+		) /; heldMsgName =!= Hold@Missing["KeyAbsent", "MessageTemplate"]
 	]
 
 handleException[val_, tag_CellsToTeXException] := (
@@ -1049,7 +1180,11 @@ rethrowException[rethrownBy_, opts:OptionsPattern[]] :=
 								HoldComplete[value]
 							]&;
 						
-						If[!MatchQ[value, Failure[tag, _Association]],
+						If[
+							!MatchQ[value,
+								Failure[CellsToTeXException, _Association]
+							]
+						(* then *),
 							throwInvValExc["NonFailureObject"]
 						];
 						
@@ -1074,17 +1209,18 @@ rethrowException[rethrownBy_, opts:OptionsPattern[]] :=
 								]
 							}
 							,
-							assoc = Append[assoc,
+							assoc = Append[assoc, {
 								"MessageParameters" -> {
 									HoldForm[rethrownBy],
 									HoldForm[newTag],
 									Sequence @@ Drop[msgParams, 2],
 									Sequence @@ HoldForm /@
 										additionalMessageParameters
-								}
-							];
+								},
+								"Type" -> List @@ newTag
+							}];
 							
-							Throw[Failure[newTag, assoc], newTag]
+							Throw[Failure[CellsToTeXException, assoc], newTag]
 						]
 					]
 				]
@@ -1237,102 +1373,54 @@ functionCall:boxesToString[
 
 
 (* ::Subsubsection:: *)
-(*removeMathMode*)
+(*defaultOrFirst*)
 
 
-removeMathMode[str_String] :=
-	StringReplace[str,
-		StartOfString ~~ ws1:WhitespaceCharacter... ~~ "\\(" ~~ contents___ ~~
-			"\\)" ~~ ws2:WhitespaceCharacter... ~~ EndOfString :>
-				ws1 <> contents <> ws2
-	]
+defaultOrFirst[{___, default_, ___}, default_] := default
 
-
-(* ::Subsubsection:: *)
-(*headRulesToBoxRules*)
-
-
-headRulesToBoxRules[rules:{_Rule...}] :=
-	With[
-		{
-			argStart = $commandCharsToTeX[[2, 1]],
-			argEnd = $commandCharsToTeX[[3, 1]]
-		},
-		If[Length[#2] === 2,
-			With[
-				{
-					comm = $commandCharsToTeX[[1, 1]] <> First[#2],
-					mathArgPositions = Last[#2]
-				},
-				#1[boxes___] :>
-					comm <> (
-						argStart <> # <> argEnd& /@ MapAt[
-							removeMathMode,
-							makeString /@ {boxes},
-							mathArgPositions
-						]
-					)
-			]
-		(* else *),
-			With[{comm = $commandCharsToTeX[[1, 1]] <> #2},
-				#1[boxes___] :>
-					comm <> (argStart <> makeString[#] <> argEnd& /@ {boxes})
-			]
-		]& @@@
-			rules
-	]
+defaultOrFirst[{first_, ___}, _] := first
 
 
 (* ::Subsubsection:: *)
 (*commonestAnnotationTypes*)
 
 
-commonestAnnotationTypes[boxes_] :=
-	Module[{symbolsWithTypes, commonestTypes, incrementTypeCounter},
-		incrementTypeCounter =
-			Function[{name, type},
-				If[ValueQ[symbolsWithTypes[name][type]],
-					symbolsWithTypes[name][type]++
-				(* else *),
-					symbolsWithTypes[name][type] = 1
-				]
-			];
-		
-		boxes /. {
-			SyntaxBox[name_String, type_, ___] :>
-				incrementTypeCounter[name, type]
-			,
-			name_String?SyntaxAnnotations`Private`symbolNameQ :>
-				incrementTypeCounter[name, "DefinedSymbol"]
-		};
-		Scan[
-			With[{name = #[[1, 1, 0, 1]], type = #[[1, 1, 1]], count = #[[2]]},
-				If[
-					!ListQ[commonestTypes[name]] ||
-						Last[commonestTypes[name]] < count
-				,
-					commonestTypes[name] = {type, count}
-				(* else *),
-					If[Last[commonestTypes[name]] === count,
-						PrependTo[commonestTypes[name], type]
+commonestAnnotationTypes[boxes_, allowedTypes_, specialChars : True|False] := 
+	(* Get list of string box - syntax type pairs. *)
+	Cases[boxes,
+		syntaxBox[
+			If[specialChars,
+				name_String
+			(* else *),
+				name_String /;
+					StringMatchQ[name, RegularExpression["[\\x00-\\x7F]*"]]
+			],
+			type:allowedTypes,
+			___
+		] :>
+			{name, type}
+		,
+		{0, Infinity}
+	] //
+		Tally //
+		(* Gather tallied name - type pairs by name. *)
+		GatherBy[#, #[[1, 1]]&]& //
+		(* Convert each group to name -> commonestType rule. *)
+		Map[
+			With[{name = #[[1, 1, 1]], typeMult = #[[All, 2]]},
+				name ->
+					(*	Select default type, if it's among commonest types,
+						otherwise take first of commonest types. *)
+					defaultOrFirst[
+						(* Pick types with maximal number of occurrences.*)
+						Pick[#[[All, 1, 2]], typeMult, Max @ typeMult],
+						defaultAnnotationType[name]
 					]
-				]
 			]&
 			,
-			SubValues[symbolsWithTypes]
-		];
-		With[{name = #[[1, 1, 1]], types = #[[-1, ;; -2]]},
-			name ->
-				First @ If[Length[types] > 1,
-					Replace[
-						Select[types, # === defaultAnnotationType[name]&, 1],
-						{} -> types
-					]
-				(* else *),
-					types
-				]
-		] & /@ DownValues[commonestTypes]
-	]
+			#
+		]&
+	
 
 
 (* ::Subsubsection:: *)
@@ -1343,7 +1431,10 @@ annotationTypesToKeyVal[
 	symToTypes:{(_Rule | _RuleDelayed)...},
 	typesToKeys:{(_Rule | _RuleDelayed)...}
 ] :=
-	Replace[#[[1, 2]], typesToKeys] -> #[[All, 1]]& /@
+	(
+		Replace[#[[1, 2]], typesToKeys] ->
+			StringReplace[#[[All, 1]], c:$texSpecialChars :> $texEscape <> c]
+	)& /@
 		GatherBy[
 			Cases[
 				symToTypes,
@@ -1362,9 +1453,16 @@ annotationRulesToBoxRules[rules:{_Rule...}] :=
 		rules
 		,
 		(type_ -> {_, command_}) :>
-			With[{start = "\\" <> command <> "{"},
-				SyntaxBox[boxes_, type, ___] :>
-					start <> makeString[boxes] <> "}"
+			With[
+				{
+					start =
+						$commandCharsToTeX[[1, 1]] <> command <>
+							$commandCharsToTeX[[2, 1]],
+					end = $commandCharsToTeX[[3, 1]]
+				}
+				,
+				syntaxBox[boxes_, type, ___] :>
+					start <> makeString[boxes] <> end
 			]
 		,
 		{1}
@@ -1464,11 +1562,15 @@ labelToKeyVal[
 (*optionValueToTeX*)
 
 
+optionValueToTeX[True] = "true"
+
+optionValueToTeX[False] = "false"
+
+optionValueToTeX[subOpts:{OptionsPattern[]}] := optionsToTeX["{", subOpts, "}"]
+
 optionValueToTeX[val_] :=
 	With[{str = ToString[val]},
-		If[StringTake[str, 1] === "{" && StringTake[str, -1] === "}" ||
-				StringFreeQ[str, {"[", "]", ",", "="}]
-		,
+		If[StringMatchQ[str, "{*}"] || StringFreeQ[str, {"[", "]", ",", "="}],
 			str
 		(* else *),
 			"{" <> str <> "}"
@@ -1480,15 +1582,47 @@ optionValueToTeX[val_] :=
 (*optionsToTeX*)
 
 
-optionsToTeX[keyval:{(Rule | RuleDelayed)[_String, _]...}] :=
-	StringJoin[Riffle[(#1 <> "=" <> optionValueToTeX[#2]) & @@@ keyval, ","]]
+optionsToTeX[keyval:{OptionsPattern[]}] :=
+	StringJoin @
+		Riffle[(ToString[#1] <> "=" <> optionValueToTeX[#2]) & @@@ keyval, ","]
 
 optionsToTeX[_String, {}, _String] := ""
 
 optionsToTeX[
-	pre_String, keyval:{(Rule | RuleDelayed)[_String, _]...}, post_String
+	pre_String, keyval:{OptionsPattern[]}, post_String
 ] :=
 	pre <> optionsToTeX[keyval] <> post
+
+
+(* ::Subsubsection:: *)
+(*mergeAdjacentTeXDelims*)
+
+
+mergeAdjacentTeXDelims[startDelim_String, endDelim_String, texCode_String] :=
+	StringReplace[texCode, {
+		c : Except[WordCharacter] ~~ endDelim <> startDelim :> c,
+		endDelim <> startDelim ~~ c : Except[WordCharacter] :> c,
+		endDelim ~~ ws : (" " | "\t") .. ~~ startDelim :> ws
+	}]
+
+
+(* ::Subsubsection:: *)
+(*mergeAdjacentTeXCommands*)
+
+
+mergeAdjacentTeXCommands[
+	cmd_String, argStart_String, argEnd_String, texCode_String
+] :=
+	StringReplace[texCode,
+		cmds : (
+			RegularExpression[
+				StringReplace[cmd, "\\" -> "\\\\"] <> "(?P<braces>" <>
+				argStart <> "(?:[^" <> argStart <> argEnd <>
+				"]|(?P>braces))*" <> argEnd <> ")"
+			] ~~ (" " | "\t") ...
+		) .. :>
+			mergeAdjacentTeXDelims[cmd <> argStart, argEnd, cmds]
+]
 
 
 (* ::Subsubsection:: *)
@@ -1518,38 +1652,31 @@ templateBoxDisplayBoxes[TemplateBox[boxes_, tag_, opts___]] :=
 
 
 extractMessageLink[boxes_] :=
-	Replace[
-		Cases[
-			System`Convert`CommonDump`RemoveLinearSyntax[
-				boxes,
-				$convertRecursiveOption -> True
-			]
-			,
-			ButtonBox[
-				content_ /;
-					MatchQ[
-						ToString @ DisplayForm[content],
-						">>" | "\[RightSkeleton]"
-					]
-				,
-				___,
-				(Rule | RuleDelayed)[
-					ButtonData,
-					uri_String /; StringMatchQ[uri, "paclet:ref/*"]
-				],
-				___
-			] :>
-				StringDrop[uri, 11]
-			,
-			{0, Infinity}
-			,
-			1
+	FirstCase[
+		System`Convert`CommonDump`RemoveLinearSyntax[
+			boxes,
+			$convertRecursiveOption -> True
 		]
 		,
-		{
-			{link_} :> link,
-			{} -> Missing["NotFound"]
-		}
+		ButtonBox[
+			content_ /;
+				MatchQ[
+					ToString @ DisplayForm[content],
+					">>" | "\[RightSkeleton]"
+				]
+			,
+			___,
+			(Rule | RuleDelayed)[
+				ButtonData,
+				uri_String /; StringMatchQ[uri, "paclet:ref/*"]
+			],
+			___
+		] :>
+			StringDrop[uri, 11]
+		,
+		Missing["NotFound"]
+		,
+		{0, Infinity}
 	]
 
 
@@ -1584,35 +1711,23 @@ prettifyPatterns[expr_] :=
 (*formatToExtension*)
 
 
-formatToExtension[format_] :=
-	With[
-		{
-			formatAlt =
-				System`ConvertersDump`CaseInsensitiveReplace[
-					format, System`ConvertersDump`$formatMappings
-				]
-		},
-		Replace[
-			Cases[
-				System`ConvertersDump`$extensionMappings
-				,
-				Rule[
-					ext_,
-					str_String /;
-						StringMatchQ[
-							str, format | formatAlt, IgnoreCase -> True
-						]
-				] :>
-					StringDrop[ext, 1]
-				,
-				{1}
-				,
-				1
-			]
-			,
-			{{ext_} :> ext, {} -> ""}
+formatToExtension[_String] = ""
+
+Scan[
+	(formatToExtension[Last[#]] =
+		StringDrop[First[#], 1]) &
+	,
+	GatherBy[System`ConvertersDump`$extensionMappings, Last][[All, 1]]
+]
+Scan[
+	With[{ext = formatToExtension[Last[#]]},
+		If[ext =!= "",
+			formatToExtension[First[#]] = ext
 		]
-	]
+	] &
+	,
+	System`ConvertersDump`$formatMappings
+]
 
 
 (* ::Subsubsection:: *)
@@ -1641,33 +1756,61 @@ $supportedCellStyles = "Code" | "Input" | "Output" | "Print" | "Message"
 $cellStyleOptions = {
 	{"Code", "Processor"} ->
 		Composition[
-			trackCellIndexProcessor, mmaCellProcessor, annotateSyntaxProcessor,
-			toInputFormProcessor, cellLabelProcessor,
-			extractCellOptionsProcessor
+			trackCellIndexProcessor, mmaCellProcessor, boxesToTeXProcessor,
+			boxRulesProcessor, annotateSyntaxProcessor, toInputFormProcessor,
+			cellLabelProcessor, extractCellOptionsProcessor
 		],
 	{"Input", "Processor"} ->
 		Composition[
-			trackCellIndexProcessor, mmaCellProcessor, annotateSyntaxProcessor,
-			cellLabelProcessor, extractCellOptionsProcessor
+			trackCellIndexProcessor, mmaCellProcessor, boxesToTeXProcessor,
+			boxRulesProcessor, annotateSyntaxProcessor, cellLabelProcessor,
+			extractCellOptionsProcessor
 		],
 	{"Output" | "Print", "Processor"} ->
 		Composition[
-			trackCellIndexProcessor, mmaCellProcessor, cellLabelProcessor,
-			extractCellOptionsProcessor
+			trackCellIndexProcessor, mmaCellProcessor, boxesToTeXProcessor,
+			boxRulesProcessor, cellLabelProcessor, extractCellOptionsProcessor
 		],
 	{"Message", "Processor"} ->
 		Composition[
-			trackCellIndexProcessor, mmaCellProcessor, messageLinkProcessor,
-			cellLabelProcessor, extractCellOptionsProcessor
+			trackCellIndexProcessor, mmaCellProcessor, boxesToTeXProcessor,
+			boxRulesProcessor, messageLinkProcessor, cellLabelProcessor,
+			extractCellOptionsProcessor
 		],
 	{"Code", "BoxRules"} :> $linearBoxesToTeX,
 	{"Input" | "Output" | "Print" | "Message", "BoxRules"} :>
-		getBoxesToFormattedTeX[],
+		Join[
+			$linearBoxesToTeX,
+			$boxesToFormattedTeX,
+			headRulesToBoxRules[$boxHeadsToTeXCommands]
+		],
+	{"Input" | "Output" | "Print" | "Message", "StringRules"} :>
+		Join[$stringsToTeX, $commandCharsToTeX],
+	{"Input", "NonASCIIHandler"} -> (charToTeX[#, FontWeight -> Bold]&),
+	{"Output" | "Print" | "Message", "NonASCIIHandler"} ->
+		(charToTeX[#, FontWeight -> Plain]&),
 	{"Code", "CharacterEncoding"} -> "ASCII",
 	{"Input" | "Output" | "Print" | "Message", "CharacterEncoding"} ->
 		"Unicode",
 	{"Code" | "Input", "FormatType"} -> InputForm,
 	{"Output" | "Print" | "Message", "FormatType"} -> OutputForm,
+	{"Input", "TeXCodeSimplifier"} ->
+		(mergeAdjacentTeXCommands[
+			$commandCharsToTeX[[1, 1]] <> "pmb",
+			$commandCharsToTeX[[2, 1]],
+			$commandCharsToTeX[[3, 1]],
+			mergeAdjacentTeXDelims[
+				$commandCharsToTeX[[1, 1]] <> "(",
+				$commandCharsToTeX[[1, 1]] <> ")",
+				#
+			]
+		]&),
+	{"Output" | "Print" | "Message", "TeXCodeSimplifier"} ->
+		(mergeAdjacentTeXDelims[
+			$commandCharsToTeX[[1, 1]] <> "(",
+			$commandCharsToTeX[[1, 1]] <> ")",
+			#
+		]&),
 	{"Code" | "Input" | "Output", "Indexed"} -> True,
 	{"Print" | "Message", "Indexed"} -> False,
 	{"Code" | "Input", "Intype"} -> True,
@@ -1699,11 +1842,24 @@ $basicBoxes = _BoxData | _TextData | _RowBox | _String | _List
 
 
 $linearBoxesToTeX = {
-	RowBox[l_List] :> makeString[l],
-	(StyleBox | ButtonBox | InterpretationBox | FormBox | TagBox )[
+	RowBox[l_List] :> makeString[l]
+	,
+	(StyleBox | ButtonBox | InterpretationBox | FormBox | TagBox | TooltipBox)[
 		contents_, ___
-	] :> makeString[contents],
+	] :> makeString[contents]
+	,
 	tb:TemplateBox[_, _, ___] :> makeString[templateBoxDisplayBoxes[tb]]
+	,
+	GridBox[grid:{___List}, ___] :>
+		StringJoin@Riffle[Riffle[makeString /@ #, "\t"]& /@ grid, "\n"]
+	,
+	PaneSelectorBox[
+		rules:{(_Rule | _RuleDelayed)...},
+		HoldPattern[Dynamic][v_, ___] | v_,
+		Shortest[def_:" "],
+		OptionsPattern[]
+	] :>
+		makeString@Replace[v, Append[rules, _ :> def]]
 }
 
 
@@ -1711,7 +1867,44 @@ $linearBoxesToTeX = {
 (*$boxesToFormattedTeX*)
 
 
-$boxesToFormattedTeX = {}
+$boxesToFormattedTeX =
+	(
+		#1["\[Integral]", scr_, OptionsPattern[]] :>
+			With[
+				{
+					escChar = $commandCharsToTeX[[1, 1]],
+					argStart = $commandCharsToTeX[[2, 1]],
+					argEnd = $commandCharsToTeX[[3, 1]]
+				}
+				,
+				StringJoin[
+					escChar, #2,
+					argStart, escChar, "int", argEnd,
+					argStart, makeString[scr], argEnd
+				]
+			]
+	)& @@@ {
+		SubscriptBox -> "mmaSubM",
+		SuperscriptBox -> "mmaSupM"
+	}
+
+AppendTo[$boxesToFormattedTeX,
+	SubsuperscriptBox["\[Integral]", sub_, sup_, OptionsPattern[]] :>
+		With[
+			{
+				escChar = $commandCharsToTeX[[1, 1]],
+				argStart = $commandCharsToTeX[[2, 1]],
+				argEnd = $commandCharsToTeX[[3, 1]]
+			}
+			,
+			StringJoin[
+				escChar, "mmaSubSupM",
+				argStart, escChar, "int", argEnd,
+				argStart, makeString[sub], argEnd,
+				argStart, makeString[sup], argEnd
+			]
+		]
+]
 
 
 (* ::Subsubsection:: *)
@@ -1719,37 +1912,35 @@ $boxesToFormattedTeX = {}
 
 
 $boxHeadsToTeXCommands = {
-	SubscriptBox -> {"mmaSub", 1},
-	SuperscriptBox -> {"mmaSup", 1},
-	SubsuperscriptBox -> {"mmaSubSup", 1},
-	UnderscriptBox -> {"mmaUnder", 1},
-	OverscriptBox -> {"mmaOver", 1},
-	UnderoverscriptBox -> {"mmaUnderOver", 1},
-	FractionBox -> "mmaFrac",
+	SubscriptBox -> {"mmaSub", 2},
+	SuperscriptBox -> {"mmaSup", 2},
+	SubsuperscriptBox -> {"mmaSubSup", 3},
+	UnderscriptBox -> {"mmaUnder", 2},
+	OverscriptBox -> {"mmaOver", 2},
+	UnderoverscriptBox -> {"mmaUnderOver", 3},
+	FractionBox -> {"mmaFrac", 2},
 	SqrtBox -> {"mmaSqrt", 1},
-	RadicalBox -> {"mmaRadical", 1}
+	RadicalBox -> {"mmaRadical", 2}
 }
 
 
 (* ::Subsubsection:: *)
-(*$charsToTeX*)
+(*$stringsToTeX*)
 
 
-$charsToTeX = {
+$stringsToTeX = {
+	"\[LeftSkeleton]" -> "<<",
 	"\[RightSkeleton]" -> ">>"
-	,
-	char_ /; First@ToCharacterCode[char] > 126 :>
-		charToTeX[char]
 }
 
 If[$VersionNumber >=10,
-	$charsToTeX =
+	$stringsToTeX =
 		Join[
 			{
 				ToExpression["\"\\[LeftAssociation]\""] -> "<|",
 				ToExpression["\"\\[RightAssociation]\""] -> "|>"
 			},
-			$charsToTeX
+			$stringsToTeX
 		]
 ]
 
@@ -1772,7 +1963,9 @@ $annotationTypesToTeX = {
 	"SymbolShadowing" -> {"shadowing", "mmaShd"},
 	"SyntaxError" -> {"syntaxerror", "mmaSnt"},
 	"EmphasizedSyntaxError" -> {"emphasizedsyntaxerror", "mmaEmp"},
-	"FormattingError" -> {"formattingerror", "mmaFmt"}
+	"FormattingError" -> {"formattingerror", "mmaFmt"},
+	"String" -> {None, "mmaStr"},
+	"Comment" -> {None, "mmaCmt"}
 }
 
 
@@ -1810,34 +2003,24 @@ makeStringDefault[BoxData[boxes_]] := makeString[boxes]
 
 
 (* ::Subsubsection:: *)
-(*getBoxesToFormattedTeX*)
+(*headRulesToBoxRules*)
 
 
-Options[getBoxesToFormattedTeX] = {
-	"BoxRules" :> Join[$linearBoxesToTeX, $boxesToFormattedTeX],
-	"BoxHeadsToTeXCommands" :> $boxHeadsToTeXCommands,
-	"CharacterRules" :> Join[$charsToTeX, $commandCharsToTeX]
-}
+SetAttributes[headRulesToBoxRules, Listable]
 
 
-getBoxesToFormattedTeX[OptionsPattern[]] :=
-	With[{characterRules = OptionValue["CharacterRules"]},
-		Join[
-			OptionValue["BoxRules"],
-			headRulesToBoxRules[OptionValue["BoxHeadsToTeXCommands"]],
-			If[characterRules === {},
-				{}
-			(* else *),
-				{
-					str_String :>
-						StringJoin @ Replace[
-							Characters[makeStringDefault[str]],
-							characterRules,
-							{1}
-						]
-				}
-			]
-		]
+headRulesToBoxRules[
+	boxHead_ -> {texCommandName_String, argsNo_Integer?NonNegative}
+] :=
+	With[
+		{
+			comm = $commandCharsToTeX[[1, 1]] <> texCommandName,
+			argStart = $commandCharsToTeX[[2, 1]],
+			argEnd = $commandCharsToTeX[[3, 1]]
+		}
+		,
+		HoldPattern @ boxHead[boxes:Repeated[_, {argsNo}], OptionsPattern[]] :>
+			comm <> (argStart <> makeString[#] <> argEnd& /@ {boxes})
 	]
 
 
@@ -1854,24 +2037,69 @@ defaultAnnotationType[_Symbol | _String] := "UndefinedSymbol"
 
 
 (* ::Subsubsection:: *)
+(*texMathReplacementRegister*)
+
+
+texMathReplacementRegister[str_String] := (
+	If[! StringQ @ texMathReplacement[str],
+		With[{texCode = StringTrim @ System`Convert`TeXFormDump`MakeTeX[str]},
+			If[texCode =!= "",
+				texMathReplacement[str] = texCode
+			]
+		]
+	];
+	str
+)
+
+
+(* ::Subsubsection:: *)
 (*charToTeX*)
 
 
-charToTeX[char_] :=
-	StringReplace[
-		StringJoin @ Replace[
-			System`Convert`TeXFormDump`TextExceptions @
-				System`Convert`TeXFormDump`TeXCharacters[char]
-			,
-			{"$", texStr_, "$"} :>
-				If[StringFreeQ[texStr, "\\"],
-					texStr
-				(* else *),
-					{"\\(", texStr, "\\)"}
-				]
-		]
+Options[charToTeX] = {FontWeight -> Plain}
+
+
+functionCall:charToTeX[char_, OptionsPattern[]] :=
+	With[
+		{
+			styleWrapper =
+				Replace[OptionValue[FontWeight], {
+					Plain -> Identity,
+					Bold -> ({"\\pmb{", # , "}"} &),
+					_ :>
+						throwException[functionCall,
+							{"Unsupported", "OptionValue", FontWeight},
+							{OptionValue[FontWeight], {Plain, Bold}}
+						]
+				}]
+		}
 		,
-		" " -> ""
+		StringReplace[
+			StringJoin @ Replace[
+				System`Convert`TeXFormDump`TextExceptions @
+					System`Convert`TeXFormDump`TeXCharacters[char]
+				,
+				{
+					{"$", texStr_, "$"} :>
+						If[StringFreeQ[texStr, "\\"],
+							texStr
+						(* else *),
+							{"\\(", styleWrapper[texStr], "\\)"}
+						],
+					texStr_String /; !StringFreeQ[texStr, "\\"] :>
+						styleWrapper[texStr]
+				}
+			]
+			,
+			With[{escChar = $commandCharsToTeX[[1, 1]]},
+				{
+					" " -> "",
+					"\\{" -> escChar <> "{", "{" -> $commandCharsToTeX[[2, 1]],
+					"\\}" -> escChar <> "}", "}" -> $commandCharsToTeX[[3, 1]],
+					"\\\\" -> "\\\\", "\\" -> escChar
+				}
+			]
+		]
 	]
 
 
@@ -2029,7 +2257,9 @@ functionCall:trackCellIndexProcessor[data:{___?OptionQ}] :=
 Options[annotateSyntaxProcessor] = {
 	"BoxRules" -> {},
 	"AnnotationTypesToTeX" :> $annotationTypesToTeX,
-	"AnnotationTypesNormalizer" -> Composition[First, NormalizeAnnotationTypes]
+	"CommonestTypesAsTeXOptions" -> "ASCII",
+	"StringBoxToTypes" -> Automatic,
+	"AnnotateComments" -> Automatic
 }
 
 
@@ -2037,50 +2267,97 @@ functionCall:annotateSyntaxProcessor[data:{___?OptionQ}] :=
 	Module[
 		{
 			boxes, boxRules, texOptions,
-			annotationTypesToTeX, annotationTypesNormalizer,
-			keyVal, preprocessedBoxes, commonestTypes
+			annotationTypesToTeX, commonestTypesAsTeXOptions,
+			stringBoxToTypes, annotateComments,
+			preprocessedBoxes, commonestTypes, annotationTypesToTeXKeys
 		}
 		,
 		{
 			boxes, boxRules, texOptions,
-			annotationTypesToTeX, annotationTypesNormalizer
+			annotationTypesToTeX, commonestTypesAsTeXOptions,
+			stringBoxToTypes, annotateComments
 		} =
 			processorDataLookup[functionCall,
 				{data, Options[annotateSyntaxProcessor]},
 				{
 					"Boxes", "BoxRules", "TeXOptions",
-					"AnnotationTypesToTeX", "AnnotationTypesNormalizer"
+					"AnnotationTypesToTeX", "CommonestTypesAsTeXOptions",
+					"StringBoxToTypes", "AnnotateComments"
 				}
 			];
+		
+		If[stringBoxToTypes === Automatic,
+			stringBoxToTypes =
+				{
+					If[commonestTypesAsTeXOptions === False,
+						Automatic
+					(* else *),
+						(* Delete String type annotation rule. *)
+						Delete[SyntaxAnnotations`Private`$stringBoxToTypes, 2]
+					]
+					,
+					_String?SyntaxAnnotations`Private`symbolNameQ ->
+						{"DefinedSymbol"}
+				} // Flatten
+		];
+		If[annotateComments === Automatic,
+			annotateComments = commonestTypesAsTeXOptions === False
+		];
 		
 		preprocessedBoxes =
 			AnnotateSyntax[
 				boxes,
-				"BoxRules" -> {
-					SyntaxBox[box_, types__] :>
-						SyntaxBox[box, annotationTypesNormalizer[types]]
-				}
+				"Annotation" -> (syntaxBox[#1, First@#2]&),
+				"StringBoxToTypes" -> stringBoxToTypes,
+				"AnnotateComments" -> annotateComments
 			];
 		
-		commonestTypes = commonestAnnotationTypes[preprocessedBoxes];
+		Switch[commonestTypesAsTeXOptions,
+			"ASCII" | True,
+				commonestTypes =
+					commonestAnnotationTypes[
+						preprocessedBoxes,
+						Except[
+							Alternatives @@ Cases[annotationTypesToTeX,
+								_[type_, {None, _}] :> type
+							]
+						],
+						TrueQ[commonestTypesAsTeXOptions]
+					];
 		
-		preprocessedBoxes = preprocessedBoxes /.
-			(SyntaxBox[#1, #2, ___] :> #1 & @@@ commonestTypes);
+				preprocessedBoxes =
+					preprocessedBoxes /.
+						(syntaxBox[#1, #2] :> #1 & @@@ commonestTypes);
+				
+				annotationTypesToTeXKeys =
+					Cases[annotationTypesToTeX,
+						h_[type_, {key:Except[None], _}] :>
+							h[type, "more" <> key]
+					];
 		
-		keyVal = annotationTypesToKeyVal[
-			commonestTypes
-			,
-			Append[
-				(* MapAt[First, annotationTypesToTeX, {All, 2}]
-					doesn't work in v8. *)
-				#[[0]][#[[1]], "more" <> #[[2, 1]]] & /@ annotationTypesToTeX
-				,
-				unsupportedType_ :>
-					throwException[functionCall,
-						{"Unsupported", "AnnotationType"},
-						{unsupportedType, annotationTypesToTeX[[All, 1]]}
+				texOptions =
+					Join[texOptions,
+						annotationTypesToKeyVal[
+							commonestTypes
+							,
+							Append[annotationTypesToTeXKeys,
+								unsupportedType_ :>
+									throwException[functionCall,
+										{"Unsupported", "AnnotationType"},
+										{
+											unsupportedType,
+											annotationTypesToTeXKeys[[All, 1]]
+										}
+									]
+							]
+						]
 					]
-			]
+			,
+			Except[False],
+				throwException[functionCall,
+					{"Unsupported", "OptionValue", "CommonestTypesAsTeXOptions"},
+					{commonestTypesAsTeXOptions, {True, "ASCII", False}}
+				]
 		];
 		
 		{
@@ -2090,7 +2367,7 @@ functionCall:annotateSyntaxProcessor[data:{___?OptionQ}] :=
 					annotationRulesToBoxRules[annotationTypesToTeX],
 					boxRules
 				],
-			"TeXOptions" -> Join[texOptions, keyVal],
+			"TeXOptions" -> texOptions,
 			data
 		}
 	]
@@ -2154,24 +2431,63 @@ functionCall:messageLinkProcessor[data:{___?OptionQ}] :=
 
 
 (* ::Subsubsection:: *)
-(*mmaCellProcessor*)
+(*boxRulesProcessor*)
 
 
-Options[mmaCellProcessor] = {"BoxRules" -> {}, "Indentation" -> "  "}
+Options[boxRulesProcessor] = {
+	"BoxRules" -> {}, "StringRules" -> {}, "NonASCIIHandler" -> Identity
+}
 
 
-functionCall:mmaCellProcessor[data:{___?OptionQ}] :=
-	Module[{boxes, boxRules, style, texOptions, indentation, texCode},
-		{boxes, style, texOptions, boxRules, indentation} =
+functionCall:boxRulesProcessor[data:{___?OptionQ}] :=
+	Module[{boxRules, stringRules, nonASCIIHandler},
+		{boxRules, stringRules, nonASCIIHandler} =
 			processorDataLookup[functionCall,
-				{data, Options[mmaCellProcessor]},
-				{"Boxes", "Style", "TeXOptions", "BoxRules", "Indentation"}
+				{data, Options[boxRulesProcessor]},
+				{"BoxRules", "StringRules", "NonASCIIHandler"}
+			];
+		
+		If[nonASCIIHandler =!= Identity,
+			With[{nonASCIIHandler = nonASCIIHandler},
+				AppendTo[stringRules,
+					char:RegularExpression["[^\\x00-\\x7F]"] :>
+						nonASCIIHandler[char]
+				]
+			]
+		];
+		
+		If[stringRules =!= {},
+			With[{stringRules = stringRules},
+				AppendTo[boxRules,
+					str_String :>
+						StringReplace[makeStringDefault[str], stringRules]
+				]
+			]
+		];
+		
+		{"BoxRules" -> boxRules, "StringRules" -> stringRules, data}
+	]
+
+
+(* ::Subsubsection:: *)
+(*boxesToTeXProcessor*)
+
+
+Options[boxesToTeXProcessor] =
+	{"BoxRules" -> {}, "TeXCodeSimplifier" -> Identity}
+
+
+functionCall:boxesToTeXProcessor[data:{___?OptionQ}] :=
+	Module[{boxes, boxRules, texCodeSimplifier, texCode},
+		{boxes, boxRules, texCodeSimplifier} =
+			processorDataLookup[functionCall,
+				{data, Options[boxesToTeXProcessor]},
+				{"Boxes", "BoxRules", "TeXCodeSimplifier"}
 			];
 		boxes = Replace[boxes, Cell[contents_, ___] :> contents];
 		boxes = Replace[boxes, BoxData[b_] :> b];
 		
-		AppendTo[
-			boxRules,
+		AppendTo[boxRules,
 			With[{supportedBoxes = boxRules[[All, 1]]},
 				unsupportedBox:Except[$basicBoxes] :>
 					throwException[functionCall, {"Unsupported", "Box"},
@@ -2179,12 +2495,33 @@ functionCall:mmaCellProcessor[data:{___?OptionQ}] :=
 					]
 			]
 		];
+		
 		texCode =
-			rethrowException[functionCall,
-				"TagPattern" ->
-					CellsToTeXException["Unsupported", "FormatType"]
-			] @ boxesToString[
-				boxes, boxRules, FilterRules[data, Options[ToString]]
+			texCodeSimplifier @
+				rethrowException[functionCall,
+					"TagPattern" ->
+						CellsToTeXException["Unsupported", "FormatType"]
+				] @ boxesToString[
+					boxes, boxRules, FilterRules[data, Options[ToString]]
+				];
+		
+		{"TeXCode" -> texCode, data}
+	]
+
+
+(* ::Subsubsection:: *)
+(*mmaCellProcessor*)
+
+
+Options[mmaCellProcessor] = {"Indentation" -> "  "}
+
+
+functionCall:mmaCellProcessor[data:{___?OptionQ}] :=
+	Module[{texCode, style, texOptions, indentation},
+		{texCode, style, texOptions, indentation} =
+			processorDataLookup[functionCall,
+				{data, Options[mmaCellProcessor]},
+				{"TeXCode", "Style", "TeXOptions", "Indentation"}
 			];
 		
 		texCode = StringJoin[
@@ -2199,7 +2536,7 @@ functionCall:mmaCellProcessor[data:{___?OptionQ}] :=
 			"\n\\end{mmaCell}"
 		];
 		
-		{"TeXCode" -> texCode, "BoxRules" -> boxRules, data}
+		{"TeXCode" -> texCode, data}
 	]
 
 
@@ -2290,8 +2627,11 @@ functionCall:mmaCellGraphicsProcessor[data:{___?OptionQ}] :=
 (*Common operations*)
 
 
-Protect @ Evaluate @ Names[
-	"CellsToTeX`Configuration`" ~~ Except["$"] ~~ Except["`"]...
+Protect @ Evaluate @ DeleteCases[
+	Names["CellsToTeX`Configuration`" ~~ Except["$"] ~~ Except["`"] ...],
+	"texMathReplacement",
+	{1},
+	1
 ]
 
 
@@ -2369,6 +2709,106 @@ functionCall:CellToTeX[boxes_, opts:OptionsPattern[]] :=
 			"MessageTemplate" :> CellsToTeXException::missingProcRes,
 			"AdditionalMessageParameters" -> {processor}
 		] @ dataLookup[data, "TeXCode"]
+	]
+
+
+(* ::Subsubsection:: *)
+(*CellsToTeXPreamble*)
+
+
+Options[CellsToTeXPreamble] = {
+	"Gobble" -> Automatic,
+	"UseListings" -> Automatic,
+	"TeXOptions" -> {},
+	"TeXMathReplacement" -> texMathReplacement,
+	"CatchExceptions" -> True
+}
+
+
+functionCall:CellsToTeXPreamble[OptionsPattern[]] :=
+	If[OptionValue["CatchExceptions"],
+		catchException
+	(* else *),
+		Identity
+	] @ Module[
+		{gobble, useListings, texOptions, mathReplacement}
+		,
+		{gobble, useListings, texOptions, mathReplacement} =
+			OptionValue @
+				{"Gobble", "UseListings", "TeXOptions", "TeXMathReplacement"};
+		
+		If[!MatchQ[texOptions, {OptionsPattern[]}],
+			throwException[functionCall,
+				{"Unsupported", "OptionValue", "TeXOptions"},
+				{texOptions, {"list of options"}}
+			]
+		];
+		If[!MatchQ[mathReplacement, Except[HoldPattern@Symbol[___], _Symbol]],
+			throwException[functionCall,
+				{"Unsupported", "OptionValue", "TeXMathReplacement"},
+				{mathReplacement, {"a symbol"}}
+			]
+		];
+		
+		(* By default gobble default indentation of mmaCell. *)
+		If[gobble === Automatic,
+			gobble =
+				StringLength @ OptionValue[mmaCellProcessor, "Indentation"]
+		];
+		Switch[gobble,
+			_Integer?NonNegative,
+				PrependTo[texOptions, "morefv" -> {"gobble" -> gobble}]
+			,
+			Except[None],
+				throwException[functionCall,
+					{"Unsupported", "OptionValue", "Gobble"},
+					{gobble, {Automatic, None, "non-negative integer"}}
+				]
+		];
+		
+		(*	Listings are used to highlight non-annotated code using TeX
+			environment options. If moving annotations to options is switched
+			off then, by default, don't use listings, otherwise use them.
+			Since listings are, by default, switched on in mmacells package,
+			if we're using them, we can just omit this option. *)
+		If[useListings === Automatic,
+			useListings =
+				Replace[
+					OptionValue[
+						annotateSyntaxProcessor,
+						"CommonestTypesAsTeXOptions"
+					],
+					Except[False] -> None
+				]
+		];
+		Switch[useListings,
+			True | False,
+				PrependTo[texOptions, "uselistings" -> useListings]
+			,
+			Except[None],
+				throwException[functionCall,
+					{"Unsupported", "OptionValue", "UseListings"},
+					{useListings, {Automatic, True, False, None}}
+				]
+		];
+		StringJoin @ Riffle[
+			DeleteCases[
+				Prepend[
+					StringJoin[
+						"\\mmaDefineMathReplacement{",
+							#1[[1, 1]],
+						"}{",
+							#2,
+						"}"
+					]& @@@
+						DownValues @ Evaluate[mathReplacement]
+					,
+					optionsToTeX["\\mmaSet{", texOptions, "}"]
+				],
+				""
+			],
+			"\n"
+		]
 	]
 
 

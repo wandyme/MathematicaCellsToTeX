@@ -22,212 +22,432 @@ $ContextPath =
 	]
 
 
+SetAttributes[TestCommonestAnnotationTypes, HoldAllComplete]
+
+TestCommonestAnnotationTypes[
+	{boxes_, allowedTypes_},
+	expected_,
+	Shortest[messages_:{}],
+	opts:OptionsPattern[Test]
+] := (
+	Test[
+		commonestAnnotationTypes[boxes, allowedTypes, False]
+		,
+		expected
+		,
+		messages
+		,
+		opts
+		,
+		TestFailureMessage -> "False"
+	];
+	Test[
+		commonestAnnotationTypes[boxes, allowedTypes, True]
+		,
+		expected
+		,
+		messages
+		,
+		opts
+		,
+		TestFailureMessage -> "True"
+	]
+)
+
+TestCommonestAnnotationTypes[args___] :=
+	With[{msg = "Incorrect arguments: " <> ToString[Unevaluated[{args}]]},
+		MUnit`Package`testError[msg, {}, args]
+	]
+
+
 (* ::Section:: *)
 (*Tests*)
+
+
+(* ::Subection:: *)
+(*ASCII*)
 
 
 Block[{defaultAnnotationType},
 	defaultAnnotationType["a"] = "testDefaultAnnotationTypeOfa";
 	defaultAnnotationType["b"] = "testDefaultAnnotationTypeOfb";
 	
-	Test[
-		"a" // commonestAnnotationTypes
-		,
-		{"a" -> "DefinedSymbol"}
-		,
-		TestID -> "1 symbol: 1 time: no"
-	];
-	Test[
-		SyntaxBox["a", "testNonDefault"] // commonestAnnotationTypes
+	TestCommonestAnnotationTypes[
+		{syntaxBox["a", "testNonDefault"], _}
 		,
 		{"a" -> "testNonDefault"}
 		,
-		TestID -> "1 symbol: 1 time: non-default"
+		TestID -> "ASCII: 1 symbol: 1 time: non-default"
 	];
-	Test[
-		SyntaxBox["a", "testDefaultAnnotationTypeOfa"] //
-			commonestAnnotationTypes
+	TestCommonestAnnotationTypes[
+		{syntaxBox["a", "testDefaultAnnotationTypeOfa"], _}
 		,
 		{"a" -> "testDefaultAnnotationTypeOfa"}
 		,
-		TestID -> "1 symbol: 1 time: default"
+		TestID -> "ASCII: 1 symbol: 1 time: default"
 	];
-	Test[
-		SyntaxBox["a", "testNonDefault", "testDefaultAnnotationTypeOfa"] //
-			commonestAnnotationTypes
+	TestCommonestAnnotationTypes[
+		{syntaxBox["a", "testNonDefault", "testDefaultAnnotationTypeOfa"], _}
 		,
 		{"a" -> "testNonDefault"}
 		,
-		TestID -> "1 symbol: 1 time: non-default + default"
+		TestID -> "ASCII: 1 symbol: 1 time: non-default + default"
 	];
-	Test[
-		SyntaxBox["a", "testDefaultAnnotationTypeOfa", "testNonDefault"] //
-			commonestAnnotationTypes
+	TestCommonestAnnotationTypes[
+		{syntaxBox["a", "testDefaultAnnotationTypeOfa", "testNonDefault"], _}
 		,
 		{"a" -> "testDefaultAnnotationTypeOfa"}
 		,
-		TestID -> "1 symbol: 1 time: default + non-default"
+		TestID -> "ASCII: 1 symbol: 1 time: default + non-default"
 	];
 	
 	
-	Test[
-		RowBox[{"a", "a"}] // commonestAnnotationTypes
-		,
-		{"a" -> "DefinedSymbol"}
-		,
-		TestID -> "1 symbol: 2 times: 1 no"
-	];
-	Test[
-		RowBox[{
-			SyntaxBox["a", "testNonDefault"],
-			SyntaxBox["a", "testNonDefault"]
-		}] // commonestAnnotationTypes
+	TestCommonestAnnotationTypes[
+		{
+			RowBox[{
+				syntaxBox["a", "testNonDefault"],
+				syntaxBox["a", "testNonDefault"]
+			}],
+			_
+		}
 		,
 		{"a" -> "testNonDefault"}
 		,
-		TestID -> "1 symbol: 2 times: 1 non-default"
+		TestID -> "ASCII: 1 symbol: 2 times: 1 non-default"
 	];
-	Test[
-		RowBox[{
-			SyntaxBox["a", "testDefaultAnnotationTypeOfa"],
-			SyntaxBox["a", "testDefaultAnnotationTypeOfa"]
-		}] // commonestAnnotationTypes
+	TestCommonestAnnotationTypes[
+		{
+			RowBox[{
+				syntaxBox["a", "testDefaultAnnotationTypeOfa"],
+				syntaxBox["a", "testDefaultAnnotationTypeOfa"]
+			}],
+			_
+		}
 		,
 		{"a" -> "testDefaultAnnotationTypeOfa"}
 		,
-		TestID -> "1 symbol: 2 times: 1 default"
+		TestID -> "ASCII: 1 symbol: 2 times: 1 default"
 	];
 	
-	Test[
-		RowBox[{"a", SyntaxBox["a", "testNonDefault"]}] //
-			commonestAnnotationTypes
+	TestCommonestAnnotationTypes[
+		{
+			RowBox[{
+				syntaxBox["a", "testNonDefault"],
+				syntaxBox["a", "testDefaultAnnotationTypeOfa"]
+			}],
+			_
+		}
+		,
+		{"a" -> "testDefaultAnnotationTypeOfa"}
+		,
+		TestID -> "ASCII: 1 symbol: 2 times: 1 non-default, 1 default"
+	];
+	TestCommonestAnnotationTypes[
+		{
+			RowBox[{
+				syntaxBox["a", "testDefaultAnnotationTypeOfa"],
+				syntaxBox["a", "testNonDefault"]
+			}],
+			_
+		}
+		,
+		{"a" -> "testDefaultAnnotationTypeOfa"}
+		,
+		TestID -> "ASCII: 1 symbol: 2 times: 1 default, 1 non-default"
+	];
+	
+	
+	TestCommonestAnnotationTypes[
+		{
+			RowBox[{
+				syntaxBox["a", "testNonDefault"],
+				syntaxBox["a", "testNonDefault"],
+				syntaxBox["a", "testDefaultAnnotationTypeOfa"]
+			}],
+			_
+		}
 		,
 		{"a" -> "testNonDefault"}
 		,
-		TestID -> "1 symbol: 2 times: 1 no, 1 non-default"
+		TestID -> "ASCII: 1 symbol: 3 times: 2 non-default, 1 default"
 	];
-	Test[
-		RowBox[{SyntaxBox["a", "testNonDefault"], "a"}] //
-			commonestAnnotationTypes
-		,
-		{"a" -> "testNonDefault"}
-		,
-		TestID -> "1 symbol: 2 times: 1 non-default, 1 no"
-	];
-	
-	Test[
-		RowBox[{"a", SyntaxBox["a", "testDefaultAnnotationTypeOfa"]}] //
-			commonestAnnotationTypes
+	TestCommonestAnnotationTypes[
+		{
+			RowBox[{
+				syntaxBox["a", "testDefaultAnnotationTypeOfa"],
+				syntaxBox["a", "testDefaultAnnotationTypeOfa"],
+				syntaxBox["a", "testNonDefault"]
+			}],
+			_
+		}
 		,
 		{"a" -> "testDefaultAnnotationTypeOfa"}
 		,
-		TestID -> "1 symbol: 2 times: 1 no, 1 default"
-	];
-	Test[
-		RowBox[{SyntaxBox["a", "testDefaultAnnotationTypeOfa"], "a"}] //
-			commonestAnnotationTypes
-		,
-		{"a" -> "testDefaultAnnotationTypeOfa"}
-		,
-		TestID -> "1 symbol: 2 times: 1 default, 1 no"
-	];
-	
-	Test[
-		RowBox[{
-			SyntaxBox["a", "testNonDefault"],
-			SyntaxBox["a", "testDefaultAnnotationTypeOfa"]
-		}] // commonestAnnotationTypes
-		,
-		{"a" -> "testDefaultAnnotationTypeOfa"}
-		,
-		TestID -> "1 symbol: 2 times: 1 non-default, 1 default"
-	];
-	Test[
-		RowBox[{
-			SyntaxBox["a", "testDefaultAnnotationTypeOfa"],
-			SyntaxBox["a", "testNonDefault"]
-		}] // commonestAnnotationTypes
-		,
-		{"a" -> "testDefaultAnnotationTypeOfa"}
-		,
-		TestID -> "1 symbol: 2 times: 1 default, 1 non-default"
+		TestID -> "ASCII: 1 symbol: 3 times: 2 default, 1 non-default"
 	];
 	
 	
-	Test[
-		RowBox[{"a", "a", SyntaxBox["a", "testNonDefault"]}] //
-			commonestAnnotationTypes
-		,
-		{"a" -> "DefinedSymbol"}
-		,
-		TestID -> "1 symbol: 3 times: 2 no, 1 non-default"
-	];
-	Test[
-		RowBox[{"a", "a", SyntaxBox["a", "testDefaultAnnotationTypeOfa"]}] //
-			commonestAnnotationTypes
-		,
-		{"a" -> "DefinedSymbol"}
-		,
-		TestID -> "1 symbol: 3 times: 2 no, 1 default"
-	];
-	
-	Test[
-		RowBox[{
-			SyntaxBox["a", "testNonDefault"],
-			SyntaxBox["a", "testNonDefault"],
-			"a"
-		}] // commonestAnnotationTypes
-		,
-		{"a" -> "testNonDefault"}
-		,
-		TestID -> "1 symbol: 3 times: 2 non-default, 1 no"
-	];
-	Test[
-		RowBox[{
-			SyntaxBox["a", "testNonDefault"],
-			SyntaxBox["a", "testNonDefault"],
-			SyntaxBox["a", "testDefaultAnnotationTypeOfa"]
-		}] // commonestAnnotationTypes
-		,
-		{"a" -> "testNonDefault"}
-		,
-		TestID -> "1 symbol: 3 times: 2 non-default, 1 default"
-	];
-	
-	Test[
-		RowBox[{
-			SyntaxBox["a", "testDefaultAnnotationTypeOfa"],
-			SyntaxBox["a", "testDefaultAnnotationTypeOfa"],
-			"a"
-		}] // commonestAnnotationTypes
-		,
-		{"a" -> "testDefaultAnnotationTypeOfa"}
-		,
-		TestID -> "1 symbol: 3 times: 2 default, 1 no"
-	];
-	Test[
-		RowBox[{
-			SyntaxBox["a", "testDefaultAnnotationTypeOfa"],
-			SyntaxBox["a", "testDefaultAnnotationTypeOfa"],
-			SyntaxBox["a", "testNonDefault"]
-		}] // commonestAnnotationTypes
-		,
-		{"a" -> "testDefaultAnnotationTypeOfa"}
-		,
-		TestID -> "1 symbol: 3 times: 2 default, 1 non-default"
-	];
-	
-	
-	Test[
-		RowBox[{
-			SyntaxBox["a", "testNonDefaulta"],
-			SyntaxBox["b", "testNonDefaultb"]
-		}] // commonestAnnotationTypes
+	TestCommonestAnnotationTypes[
+		{
+			RowBox[{
+				syntaxBox["a", "testNonDefaulta"],
+				syntaxBox["b", "testNonDefaultb"]
+			}],
+			_
+		}
 		,
 		{"a" -> "testNonDefaulta", "b" -> "testNonDefaultb"}
 		,
-		TestID -> "2 symbols: 1 times: 1 non-default; 1 times: 1 non-default"
+		TestID ->
+			"ASCII: 2 symbols: 1 times: 1 non-default; 1 times: 1 non-default"
 	];
+	
+	TestCommonestAnnotationTypes[
+		{
+			RowBox[{
+				syntaxBox["a", "testNonDefaulta"],
+				syntaxBox["b", "testNonDefaultb2"],
+				syntaxBox["a", "testDefaultAnnotationTypeOfa"],
+				RowBox[{
+					syntaxBox["b", "testNonDefaultb1"],
+					syntaxBox["a", "testDefaultAnnotationTypeOfa"],
+					syntaxBox["a", "testNonDefaulta"],
+					syntaxBox["b", "testNonDefaultb2"],
+					syntaxBox["b", "testNonDefaultb1"],
+					syntaxBox["b", "testNonDefaultb1"]
+				}]
+			}],
+			_
+		}
+		,
+		{"a" -> "testDefaultAnnotationTypeOfa", "b" -> "testNonDefaultb1"}
+		,
+		TestID -> "ASCII: 2 symbols: \
+4 times: 2 non-default, 2 default; 5 times: 3 non-default1, 2 non-default2"
+	];
+	
+	TestCommonestAnnotationTypes[
+		{syntaxBox["a", "testNonAllowed"], "testAllowed"}
+		,
+		{}
+		,
+		TestID -> "ASCII: 1 symbol: 1 time: not allowed"
+	];
+	TestCommonestAnnotationTypes[
+		{
+			RowBox[{
+				syntaxBox["a", "testExcluded"],
+				syntaxBox["a", "testNonDefault"],
+				syntaxBox["a", "testExcluded"]
+			}],
+			Except["testExcluded"]
+		}
+		,
+		{"a" -> "testNonDefault"}
+		,
+		TestID -> "ASCII: 1 symbol: 3 times: 1 non-default, 2 not allowed"
+	]
+]
+
+
+(* ::Subection:: *)
+(*Non-ASCII*)
+
+
+Block[{defaultAnnotationType},
+	defaultAnnotationType["\[Alpha]"] = "testDefaultAnnotationTypeOfAlpha";
+	defaultAnnotationType["xy\[Alpha]z2"] =
+		"testDefaultAnnotationTypeOfxyAlphaz2";
+	defaultAnnotationType["\[Beta]"] = "testDefaultAnnotationTypeOfBeta";
+	defaultAnnotationType["b"] = "testDefaultAnnotationTypeOfb";
+	
+	
+	Test[
+		commonestAnnotationTypes[
+			syntaxBox["xy\[Alpha]z2", "testNonDefault"],
+			_,
+			False
+		]
+		,
+		{}
+		,
+		TestID -> "Non-ASCII: 1 symbol: 1 time: non-default mixed: False"
+	];
+	Test[
+		commonestAnnotationTypes[
+			syntaxBox["xy\[Alpha]z2", "testNonDefault"],
+			_,
+			True
+		]
+		,
+		{"xy\[Alpha]z2" -> "testNonDefault"}
+		,
+		TestID -> "Non-ASCII: 1 symbol: 1 time: non-default mixed: True"
+	];
+	
+	
+	Test[
+		commonestAnnotationTypes[
+			RowBox[{
+				syntaxBox["\[Alpha]", "testDefaultAnnotationTypeOfAlpha"],
+				syntaxBox["\[Alpha]", "testDefaultAnnotationTypeOfAlpha"],
+				syntaxBox["\[Alpha]", "testNonDefault"]
+			}]
+			,
+			_,
+			False
+		]
+		,
+		{}
+		,
+		TestID ->
+			"Non-ASCII: 1 symbol: 3 times: 2 default, 1 non-default: False"
+	];
+	Test[
+		commonestAnnotationTypes[
+			RowBox[{
+				syntaxBox["\[Alpha]", "testDefaultAnnotationTypeOfAlpha"],
+				syntaxBox["\[Alpha]", "testDefaultAnnotationTypeOfAlpha"],
+				syntaxBox["\[Alpha]", "testNonDefault"]
+			}]
+			,
+			_,
+			True
+		]
+		,
+		{"\[Alpha]" -> "testDefaultAnnotationTypeOfAlpha"}
+		,
+		TestID ->
+			"Non-ASCII: 1 symbol: 3 times: 2 default, 1 non-default: True"
+	];
+	
+	
+	Test[
+		commonestAnnotationTypes[
+			RowBox[{
+				syntaxBox["\[Alpha]", "testNonDefaultAlpha"],
+				syntaxBox["\[Beta]", "testNonDefaultBeta"]
+			}]
+			,
+			_,
+			False
+		]
+		,
+		{}
+		,
+		TestID -> "Non-ASCII: 2 symbols: \
+1 times: 1 non-default; 1 times: 1 non-default: False"
+	];
+	Test[
+		commonestAnnotationTypes[
+			RowBox[{
+				syntaxBox["\[Alpha]", "testNonDefaultAlpha"],
+				syntaxBox["\[Beta]", "testNonDefaultBeta"]
+			}]
+			,
+			_,
+			True
+		]
+		,
+		{
+			"\[Alpha]" -> "testNonDefaultAlpha",
+			"\[Beta]" -> "testNonDefaultBeta"
+		}
+		,
+		TestID -> "Non-ASCII: 2 symbols: \
+1 times: 1 non-default; 1 times: 1 non-default: True"
+	];
+	
+	
+	Test[
+		commonestAnnotationTypes[
+			RowBox[{
+				syntaxBox["\[Alpha]", "testNonDefaultAlpha"],
+				syntaxBox["b", "testNonDefaultb"]
+			}]
+			,
+			_,
+			False
+		]
+		,
+		{"b" -> "testNonDefaultb"}
+		,
+		TestID -> "Non-ASCII: 2 symbols: \
+1 times: 1 non-default; 1 times: 1 non-default ASCII: False"
+	];
+	Test[
+		commonestAnnotationTypes[
+			RowBox[{
+				syntaxBox["\[Alpha]", "testNonDefaultAlpha"],
+				syntaxBox["b", "testNonDefaultb"]
+			}]
+			,
+			_,
+			True
+		]
+		,
+		{"\[Alpha]" -> "testNonDefaultAlpha", "b" -> "testNonDefaultb"}
+		,
+		TestID -> "Non-ASCII: 2 symbols: \
+1 times: 1 non-default; 1 times: 1 non-default ASCII: True"
+	];
+	
+	
+	Test[
+		commonestAnnotationTypes[
+			syntaxBox["\[Alpha]", "testNonAllowed"],
+			"testAllowed",
+			False
+		]
+		,
+		{}
+		,
+		TestID -> "Non-ASCII: 1 symbol: 1 time: not allowed: False"
+	];
+	Test[
+		commonestAnnotationTypes[
+			syntaxBox["\[Alpha]", "testNonAllowed"],
+			"testAllowed",
+			True
+		]
+		,
+		{}
+		,
+		TestID -> "Non-ASCII: 1 symbol: 1 time: not allowed: True"
+	];
+	
+	Test[
+		commonestAnnotationTypes[
+			RowBox[{
+				syntaxBox["\[Alpha]", "testExcluded"],
+				syntaxBox["\[Alpha]", "testNonDefault"],
+				syntaxBox["\[Alpha]", "testExcluded"]
+			}],
+			Except["testExcluded"],
+			False
+		]
+		,
+		{}
+		,
+		TestID -> "Non-ASCII: 1 symbol: \
+3 times: 1 non-default, 2 not allowed: False"
+	];
+	Test[
+		commonestAnnotationTypes[
+			RowBox[{
+				syntaxBox["\[Alpha]", "testExcluded"],
+				syntaxBox["\[Alpha]", "testNonDefault"],
+				syntaxBox["\[Alpha]", "testExcluded"]
+			}],
+			Except["testExcluded"],
+			True
+		]
+		,
+		{"\[Alpha]" -> "testNonDefault"}
+		,
+		TestID -> "Non-ASCII: 1 symbol: \
+3 times: 1 non-default, 2 not allowed: True"
+	]
 ]
 
 
@@ -235,12 +455,16 @@ Block[{defaultAnnotationType},
 (*Incorrect arguments*)
 
 
-Module[{testArg1, testArg2},
+Module[{testArg1, testArg2, testArg3},
 	Test[
-		Catch[commonestAnnotationTypes[testArg1, testArg2];, _, HoldComplete]
+		Catch[
+			commonestAnnotationTypes[testArg1, testArg2, testArg3];,
+			_,
+			HoldComplete
+		]
 		,
 		expectedIncorrectArgsError @
-			commonestAnnotationTypes[testArg1, testArg2]
+			commonestAnnotationTypes[testArg1, testArg2, testArg3]
 		,
 		TestID -> "Incorrect arguments"
 	]

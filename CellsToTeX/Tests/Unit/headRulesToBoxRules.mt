@@ -9,10 +9,7 @@ BeginPackage["CellsToTeX`Tests`Unit`headRulesToBoxRules`", {"MUnit`"}]
 
 Get["CellsToTeX`"]
 
-Get["CellsToTeX`Tests`Utilities`"]
-
-$ContextPath =
-	Join[{"CellsToTeX`Configuration`", "CellsToTeX`Internal`"}, $ContextPath]
+PrependTo[$ContextPath, "CellsToTeX`Configuration`"]
 
 
 (* ::Section:: *)
@@ -21,61 +18,52 @@ $ContextPath =
 
 Block[{$commandCharsToTeX = {"%" -> "%%", "<" -> "%<", ">" -> "%>"}},
 	TestMatch[
-		{FractionBox -> "frac"} // headRulesToBoxRules
+		FractionBox -> {"frac", 2} // headRulesToBoxRules
 		,
-		{
-			FractionBox[Verbatim[Pattern][name_, Verbatim[___]]] :>
-				"%frac" <> ("<" <> makeString[#] <> ">"& /@ {name_})
-		}
+		Verbatim[HoldPattern] @ FractionBox[
+			Verbatim[Pattern][pattName_, Verbatim @ Repeated[_, {2}]],
+			Verbatim[OptionsPattern[]]
+		] :>
+			"%frac" <> ("<" <> makeString[#] <> ">"& /@ {pattName_})
 		,
-		TestID -> "1 rule"
-	];
+		TestID -> "Single rule"
+	]
+]
 	
+Block[{$commandCharsToTeX = {"|" -> "x", "(" -> "y", ")" -> "z"}},
 	TestMatch[
-		{myBox -> {"myCommand", {{1}, {3}}}} // headRulesToBoxRules
-		,
-		{
-			myBox[Verbatim[Pattern][name_, Verbatim[___]]] :>
-				"%myCommand" <> (
-					"<" <> # <> ">"& /@ MapAt[
-						removeMathMode,
-						makeString /@ {name_},
-						{{1}, {3}}
-					]
-				)
-		}
-		,
-		TestID -> "1 rule: with math mode args positions"
-	];
-	
-	TestMatch[
-		{SubscriptBox -> "sub", SuperscriptBox -> "sup"} //
+		{SubscriptBox -> {"sub", 1}, UnderoverscriptBox -> {"uo", 3}} //
 			headRulesToBoxRules
 		,
 		{
-			SubscriptBox[Verbatim[Pattern][name_, Verbatim[___]]] :>
-				"%sub" <> ("<" <> makeString[#] <> ">"& /@ {name_}),
-			SuperscriptBox[Verbatim[Pattern][name_, Verbatim[___]]] :>
-				"%sup" <> ("<" <> makeString[#] <> ">"& /@ {name_})
+			Verbatim[HoldPattern] @ SubscriptBox[
+				Verbatim[Pattern][pattName1_,  Verbatim @ Repeated[_, {1}]],
+				Verbatim[OptionsPattern[]]
+			] :>
+				"|sub" <> ("(" <> makeString[#] <> ")"& /@ {pattName1_})
+			,
+			Verbatim[HoldPattern] @ UnderoverscriptBox[
+				Verbatim[Pattern][pattName2_,  Verbatim @ Repeated[_, {3}]],
+				Verbatim[OptionsPattern[]]
+			] :>
+				"|uo" <> ("(" <> makeString[#] <> ")"& /@ {pattName2_})
 		}
 		,
-		TestID -> "2 rules"
+		TestID -> "List of rules"
 	]
 ]
 
 
 (* ::Subsection:: *)
-(*Incorrect arguments*)
+(*Protected attribute*)
 
 
-Module[{testArg1, testArg2},
-	Test[
-		Catch[headRulesToBoxRules[testArg1, testArg2];, _, HoldComplete]
-		,
-		expectedIncorrectArgsError[headRulesToBoxRules[testArg1, testArg2]]
-		,
-		TestID -> "Incorrect arguments"
-	]
+Test[
+	MemberQ[Attributes[headRulesToBoxRules], Protected]
+	,
+	True
+	,
+	TestID -> "Protected attribute"
 ]
 
 

@@ -14,91 +14,52 @@ Get["CellsToTeX`Tests`Utilities`"]
 PrependTo[$ContextPath, "CellsToTeX`Configuration`"]
 
 
-SetAttributes[moduleWithMockedFunctions, HoldAll]
+SetAttributes[withMockedFunctions, HoldFirst]
 
-moduleWithMockedFunctions[vars_List, lookedupBoxes_, body_] :=
-	Module[vars,
-		Block[
-			{
-				processorDataLookup, $processorDataLookupLog = {},
-				testLookedupTeXOption, testLookedupBoxRuleLHS,
-				testLookedupBoxRuleRHS
-				,
-				CellsToTeX`Internal`optionsToTeX, $optionsToTeXLog = {}
-				,
-				CellsToTeX`Internal`boxesToString, $boxesToStringLog = {}
-				,
-				$basicBoxes, testBasicBoxes
-				,
-				testDefaultBoxRuleLHS, testDefaultBoxRuleRHS
-				,
-				testData, testExtendedBoxRules,
-				testBoxes, testStyle, testBox, testTeXOptions,
-				testConvertedBox, testIndentation, testFormatTypeValue,
-				testCharacterEncodingValue, testPageHeightValue,
-				testUnusedOptionName, testUnusedOptionValue
-			}
+withMockedFunctions[body_] :=
+	Block[
+		{
+			processorDataLookup, $processorDataLookupLog = {},
+			testLookedupTeXCode, testLookedupTeXOptions,
+			testLookedupIndentation
 			,
-			SetAttributes[processorDataLookup, HoldFirst];
-			mockFunction[
-				processorDataLookup,
-				$processorDataLookupLog,
-				{
-					lookedupBoxes, "testLookedupStyle",
-					{testLookedupTeXOption},
-					{testLookedupBoxRuleLHS -> testLookedupBoxRuleRHS},
-					"testLookedupIndentation"
-				}
-			];
-			mockFunction[
-				CellsToTeX`Internal`optionsToTeX,
-				$optionsToTeXLog
-				,
-				"[testOptionsToTeXResult" <>
+			CellsToTeX`Internal`optionsToTeX, $optionsToTeXLog = {}
+			,
+			testDefaultIndentation
+			,
+			testData,
+			testTeXCode, testStyle, testTeXOptions, testIndentation,
+			testUnusedOptionName, testUnusedOptionValue
+		}
+		,
+		SetAttributes[processorDataLookup, HoldFirst];
+		mockFunction[
+			processorDataLookup,
+			$processorDataLookupLog,
+			{
+				testLookedupTeXCode, "testLookedupStyle",
+				testLookedupTeXOptions, "testLookedupIndentation"
+			}
+		];
+		mockFunction[
+			CellsToTeX`Internal`optionsToTeX,
+			$optionsToTeXLog
+			,
+			"[testOptionsToTeXResult" <>
 				ToString @ Length[$optionsToTeXLog] <> "]"
-			];
-			mockFunction[
-				CellsToTeX`Internal`boxesToString,
-				$boxesToStringLog
-				,
-				"testBoxesToStringResult" <>
-				ToString @ Length[$boxesToStringLog]
-			];
-			$basicBoxes = testBasicBoxes;
+		];
+		
+		SetOptions[mmaCellProcessor, "Indentation" -> testDefaultIndentation];
+		
+		testData = {
+			"TeXCode" -> testTeXCode,
+			"Style" -> testStyle,
+			"TeXOptions" -> testTeXOptions,
+			"Indentation" -> testIndentation,
+			testUnusedOptionName -> testUnusedOptionValue
+		};
 			
-			SetOptions[mmaCellProcessor,
-				"BoxRules" -> {testDefaultBoxRuleLHS -> testDefaultBoxRuleRHS},
-				"Indentation" -> "testDefaultIndentation"
-			];
-			testData = {
-				"Boxes" -> testBoxes,
-				"Style" -> testStyle,
-				"BoxRules" -> {testBox -> testConvertedBox},
-				"TeXOptions" -> testTeXOptions,
-				"Indentation" -> testIndentation,
-				"FormatType" -> testFormatTypeValue,
-				"CharacterEncoding" -> testCharacterEncodingValue,
-				"PageHeight" -> testPageHeightValue,
-				testUnusedOptionName -> testUnusedOptionValue
-			};
-			testExtendedBoxRules = {
-				testLookedupBoxRuleLHS -> testLookedupBoxRuleRHS,
-				With[{testData = testData},
-					HoldPattern[
-						Verbatim[Pattern][
-							pattName_, Verbatim[Except][testBasicBoxes]
-						] :>
-							CellsToTeX`Internal`throwException[
-								mmaCellProcessor[testData],
-								{"Unsupported", "Box"},
-								{pattName_, {testLookedupBoxRuleLHS}}
-							]
-					]
-				]
-			};
-			
-			body
-		]
+		body
 	]
 
 
@@ -106,22 +67,18 @@ moduleWithMockedFunctions[vars_List, lookedupBoxes_, body_] :=
 (*Tests*)
 
 
-moduleWithMockedFunctions[
-	{testLookedupBoxes}
-	,
-	testLookedupBoxes
-	,
+withMockedFunctions[
+	testLookedupTeXCode = "testLookedupTeXCode";
 	
-	TestMatch[
+	Test[
 		mmaCellProcessor[testData]
 		,
 		{
 			"TeXCode" -> "\
 \\begin{mmaCell}[testOptionsToTeXResult1]{testLookedupStyle}
-testLookedupIndentationtestBoxesToStringResult1
+testLookedupIndentationtestLookedupTeXCode
 \\end{mmaCell}"
 			,
-			"BoxRules" -> testExtendedBoxRules,
 			testData
 		}
 		,
@@ -134,184 +91,43 @@ testLookedupIndentationtestBoxesToStringResult1
 		With[{testData = testData},
 			{HoldComplete[
 				mmaCellProcessor[testData],
-				{
-					testData,
-					{
-						"BoxRules" ->
-							{testDefaultBoxRuleLHS -> testDefaultBoxRuleRHS},
-						"Indentation" -> "testDefaultIndentation"
-					}
-				},
-				{"Boxes", "Style", "TeXOptions", "BoxRules", "Indentation"}
+				{testData, {"Indentation" -> testDefaultIndentation}},
+				{"TeXCode", "Style", "TeXOptions", "Indentation"}
 			]}
 		]
 		,
 		TestID -> "passing data to processorDataLookup"
 	];
-	TestMatch[
-		$boxesToStringLog
-		,
-		{HoldComplete @@ {
-			testLookedupBoxes,
-			testExtendedBoxRules,
-			{
-				"FormatType" -> testFormatTypeValue,
-				"CharacterEncoding" -> testCharacterEncodingValue,
-				"PageHeight" -> testPageHeightValue
-			}
-		}}
-		,
-		TestID -> "basic: boxesToString"
-	];
 	Test[
 		$optionsToTeXLog
 		,
-		{HoldComplete["[", {testLookedupTeXOption}, "]"]}
+		{HoldComplete["[", testLookedupTeXOptions, "]"]}
 		,
 		TestID -> "basic: optionsToTeX"
 	]
 ]
 
 
-moduleWithMockedFunctions[
-	{testLookedupBoxes1, testLookedupBoxes2}
-	,
-	{testLookedupBoxes1, testLookedupBoxes2}
-	,
+withMockedFunctions[
+	testLookedupTeXCode = "\
+testLookedupTeXCodeLine1
+testLookedupTeXCodeLine2\[IndentingNewLine]testLookedupTeXCodeLine3";
 	
-	TestMatch[
+	Test[
 		mmaCellProcessor[testData]
 		,
 		{
 			"TeXCode" -> "\
 \\begin{mmaCell}[testOptionsToTeXResult1]{testLookedupStyle}
-testLookedupIndentationtestBoxesToStringResult1
+testLookedupIndentationtestLookedupTeXCodeLine1
+testLookedupIndentationtestLookedupTeXCodeLine2
+testLookedupIndentationtestLookedupTeXCodeLine3
 \\end{mmaCell}"
 			,
-			"BoxRules" -> testExtendedBoxRules,
 			testData
 		}
 		,
-		TestID -> "list of boxes: returned value"
-	];
-	
-	TestMatch[
-		$boxesToStringLog
-		,
-		{
-			HoldComplete @@ {
-				{testLookedupBoxes1, testLookedupBoxes2},
-				testExtendedBoxRules,
-				{
-					"FormatType" -> testFormatTypeValue,
-					"CharacterEncoding" -> testCharacterEncodingValue,
-					"PageHeight" -> testPageHeightValue
-				}
-			}
-		}
-		,
-		TestID -> "list of boxes: boxesToString"
-	];
-	Test[
-		$optionsToTeXLog
-		,
-		{HoldComplete["[", {testLookedupTeXOption}, "]"]}
-		,
-		TestID -> "list of boxes: optionsToTeX"
-	]
-]
-
-
-moduleWithMockedFunctions[
-	{testLookedupBoxes}
-	,
-	BoxData[testLookedupBoxes]
-	,
-	
-	TestMatch[
-		mmaCellProcessor[testData]
-		,
-		{
-			"TeXCode" -> "\
-\\begin{mmaCell}[testOptionsToTeXResult1]{testLookedupStyle}
-testLookedupIndentationtestBoxesToStringResult1
-\\end{mmaCell}"
-			,
-			"BoxRules" -> testExtendedBoxRules,
-			testData
-		}
-		,
-		TestID -> "BoxData: returned value"
-	];
-	
-	TestMatch[
-		$boxesToStringLog
-		,
-		{HoldComplete @@ {
-			testLookedupBoxes,
-			testExtendedBoxRules,
-			{
-				"FormatType" -> testFormatTypeValue,
-				"CharacterEncoding" -> testCharacterEncodingValue,
-				"PageHeight" -> testPageHeightValue
-			}
-		}}
-		,
-		TestID -> "BoxData: boxesToString"
-	];
-	Test[
-		$optionsToTeXLog
-		,
-		{HoldComplete["[", {testLookedupTeXOption}, "]"]}
-		,
-		TestID -> "BoxData: optionsToTeX"
-	]
-]
-
-
-moduleWithMockedFunctions[
-	{testLookedupBoxes}
-	,
-	Cell[BoxData[testLookedupBoxes], testCellstyle]
-	,
-	
-	TestMatch[
-		mmaCellProcessor[testData]
-		,
-		{
-			"TeXCode" -> "\
-\\begin{mmaCell}[testOptionsToTeXResult1]{testLookedupStyle}
-testLookedupIndentationtestBoxesToStringResult1
-\\end{mmaCell}"
-			,
-			"BoxRules" -> testExtendedBoxRules,
-			testData
-		}
-		,
-		TestID -> "Cell: returned value"
-	];
-	
-	TestMatch[
-		$boxesToStringLog
-		,
-		{HoldComplete @@ {
-			testLookedupBoxes,
-			testExtendedBoxRules,
-			{
-				"FormatType" -> testFormatTypeValue,
-				"CharacterEncoding" -> testCharacterEncodingValue,
-				"PageHeight" -> testPageHeightValue
-			}
-		}}
-		,
-		TestID -> "Cell: boxesToString"
-	];
-	Test[
-		$optionsToTeXLog
-		,
-		{HoldComplete["[", {testLookedupTeXOption}, "]"]}
-		,
-		TestID -> "Cell: optionsToTeX"
+		TestID -> "multiple lines: returned value"
 	]
 ]
 
@@ -327,6 +143,7 @@ Test[
 	,
 	TestID -> "Protected attribute"
 ]
+
 
 (* ::Section:: *)
 (*TearDown*)

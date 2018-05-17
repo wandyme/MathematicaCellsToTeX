@@ -5,14 +5,34 @@
 
 
 BeginPackage[
-	"CellsToTeX`Tests`Integration`getBoxesToFormattedTeX`", {"MUnit`"}
+	"CellsToTeX`Tests`Integration`boxesToString`", {"MUnit`"}
 ]
 
 
 Get["CellsToTeX`"]
 
+PrependTo[$ContextPath, "CellsToTeX`Configuration`"]
 
-With[{boxRules = CellsToTeX`Configuration`getBoxesToFormattedTeX[]},
+
+With[
+	{
+		boxRules =
+			Join[
+				$linearBoxesToTeX,
+				$boxesToFormattedTeX,
+				headRulesToBoxRules[$boxHeadsToTeXCommands],
+				{str_String :>
+					StringReplace[makeStringDefault[str],
+						Join[
+							$stringsToTeX,
+							$commandCharsToTeX,
+							{char:RegularExpression["[^[:ascii:]]"] :>
+								charToTeX[char, FontWeight -> Plain]}
+						]
+					]}
+			]
+	}
+	,
 	tmpBoxesToString =
 		CellsToTeX`Internal`boxesToString[
 			#, boxRules, FormatType -> InputForm
@@ -68,6 +88,17 @@ Test[
 	TestID -> "}"
 ]
 
+Block[{$commandCharsToTeX = {"&" -> "test1", "[" -> "test2", "]" -> "test3"}},
+	Test[
+		"\[Alpha] \t\[Beta] \[IndentingNewLine] \[Gamma]" // tmpBoxesToString
+		,
+		"&(&alpha&) \t&(&beta&) 
+ &(&gamma&)"
+		,
+		TestID -> "\\[Alpha]\\[Beta]\\[Gamma]"
+	]
+]
+
 
 Test[
 	StyleBox[StyleBox["a", Red], Green] // tmpBoxesToString
@@ -80,7 +111,7 @@ Test[
 Test[
 	SubscriptBox["\[Pi]", "\[Pi]"] // tmpBoxesToString
 	,
-	"\\mmaSub{\\pi}{\\(\\pi\\)}"
+	"\\mmaSub{\\(\\pi\\)}{\\(\\pi\\)}"
 	,
 	TestID -> "SubscriptBox: math mode"
 ]
@@ -92,11 +123,27 @@ Test[
 	,
 	TestID -> "SubscriptBox: nested"
 ]
+Test[
+	SubscriptBox["x", "y", BaseStyle -> {}] // tmpBoxesToString
+	,
+	"\\mmaSub{x}{y}"
+	,
+	TestID -> "SubscriptBox: with option"
+]
+Block[{$commandCharsToTeX = {"!" -> "test1", "(" -> "test2", ")" -> "test3"}},
+	Test[
+		SubscriptBox["\[Integral]", "a"] // tmpBoxesToString
+		,
+		"!mmaSubM(!int)(a)"
+		,
+		TestID -> "SubscriptBox: \\[Integral]: command chars"
+	]
+]
 
 Test[
 	SuperscriptBox["\[Pi]", "\[Pi]"] // tmpBoxesToString
 	,
-	"\\mmaSup{\\pi}{\\(\\pi\\)}"
+	"\\mmaSup{\\(\\pi\\)}{\\(\\pi\\)}"
 	,
 	TestID -> "SuperscriptBox: math mode"
 ]
@@ -108,11 +155,28 @@ Test[
 	,
 	TestID -> "SuperscriptBox: nested"
 ]
+Test[
+	SuperscriptBox["a", "y",
+		DefaultBaseStyle -> {}, MultilineFunction -> Automatic
+	] // tmpBoxesToString
+	,
+	"\\mmaSup{a}{y}"
+	,
+	TestID -> "SuperscriptBox: with options"
+]
+Test[
+	SuperscriptBox["\[Integral]", "\[Pi]", DefaultBaseStyle -> {}] //
+		tmpBoxesToString
+	,
+	"\\mmaSupM{\\int}{\\(\\pi\\)}"
+	,
+	TestID -> "SuperscriptBox: \\[Integral]"
+]
 
 Test[
 	SubsuperscriptBox["\[Pi]", "\[Pi]", "\[Pi]"] // tmpBoxesToString
 	,
-	"\\mmaSubSup{\\pi}{\\(\\pi\\)}{\\(\\pi\\)}"
+	"\\mmaSubSup{\\(\\pi\\)}{\\(\\pi\\)}{\\(\\pi\\)}"
 	,
 	TestID -> "SubsuperscriptBox: math mode"
 ]
@@ -128,11 +192,27 @@ Test[
 	,
 	TestID -> "SubsuperscriptBox: nested"
 ]
+Test[
+	SubsuperscriptBox["a", "1", "2", MultilineFunction -> None] //
+		tmpBoxesToString
+	,
+	"\\mmaSubSup{a}{1}{2}"
+	,
+	TestID -> "SubsuperscriptBox: with option"
+]
+Test[
+	SubsuperscriptBox["\[Integral]", "a", "\[Pi]"] //
+		tmpBoxesToString
+	,
+	"\\mmaSubSupM{\\int}{a}{\\(\\pi\\)}"
+	,
+	TestID -> "SubsuperscriptBox: \\[Integral]"
+]
 
 Test[
 	UnderscriptBox["\[Pi]", "\[Pi]"] // tmpBoxesToString
 	,
-	"\\mmaUnder{\\pi}{\\(\\pi\\)}"
+	"\\mmaUnder{\\(\\pi\\)}{\\(\\pi\\)}"
 	,
 	TestID -> "UnderscriptBox: math mode"
 ]
@@ -144,11 +224,20 @@ Test[
 	,
 	TestID -> "UnderscriptBox: nested"
 ]
+Test[
+	UnderscriptBox["\[Alpha]", "\[Beta]",
+		DiacriticalPositioning -> Automatic, LimitsPositioning -> Automatic
+	] // tmpBoxesToString
+	,
+	"\\mmaUnder{\\(\\alpha\\)}{\\(\\beta\\)}"
+	,
+	TestID -> "UnderscriptBox: math mode, with options"
+]
 
 Test[
 	OverscriptBox["\[Pi]", "\[Pi]"] // tmpBoxesToString
 	,
-	"\\mmaOver{\\pi}{\\(\\pi\\)}"
+	"\\mmaOver{\\(\\pi\\)}{\\(\\pi\\)}"
 	,
 	TestID -> "OverscriptBox: math mode"
 ]
@@ -160,11 +249,19 @@ Test[
 	,
 	TestID -> "OverscriptBox: nested"
 ]
+Test[
+	OverscriptBox["a", "\[Gamma]", MultilineFunction -> Automatic] //
+		tmpBoxesToString
+	,
+	"\\mmaOver{a}{\\(\\gamma\\)}"
+	,
+	TestID -> "OverscriptBox: partial math mode, with option"
+]
 
 Test[
 	UnderoverscriptBox["\[Pi]", "\[Pi]", "\[Pi]"] // tmpBoxesToString
 	,
-	"\\mmaUnderOver{\\pi}{\\(\\pi\\)}{\\(\\pi\\)}"
+	"\\mmaUnderOver{\\(\\pi\\)}{\\(\\pi\\)}{\\(\\pi\\)}"
 	,
 	TestID -> "UnderoverscriptBox: math mode"
 ]
@@ -179,6 +276,14 @@ Test[
 {\\mmaUnderOver{a}{b}{c}}{\\mmaUnderOver{d}{e}{f}}{\\mmaUnderOver{g}{h}{i}}"
 	,
 	TestID -> "UnderoverscriptBox: nested"
+]
+Test[
+	UnderoverscriptBox["\[Delta]", "x", "\[Pi]", BaseStyle -> {}] //
+		tmpBoxesToString
+	,
+	"\\mmaUnderOver{\\(\\delta\\)}{x}{\\(\\pi\\)}"
+	,
+	TestID -> "UnderoverscriptBox: partial math mode, with option"
 ]
 
 Test[
@@ -196,11 +301,21 @@ Test[
 	,
 	TestID -> "FractionBox: nested"
 ]
+Test[
+	FractionBox["\[Epsilon]", "z",
+		DenominatorAlignment -> Center, FractionLine -> Automatic,
+		MultilineFunction -> Automatic, NumeratorAlignment -> Center
+	] // tmpBoxesToString
+	,
+	"\\mmaFrac{\\(\\epsilon\\)}{z}"
+	,
+	TestID -> "FractionBox: partial math mode, with options"
+]
 
 Test[
 	SqrtBox["\[Pi]"] // tmpBoxesToString
 	,
-	"\\mmaSqrt{\\pi}"
+	"\\mmaSqrt{\\(\\pi\\)}"
 	,
 	TestID -> "SqrtBox: math mode"
 ]
@@ -211,11 +326,18 @@ Test[
 	,
 	TestID -> "SqrtBox: nested"
 ]
+Test[
+	SqrtBox["x", SurdForm -> False] // tmpBoxesToString
+	,
+	"\\mmaSqrt{x}"
+	,
+	TestID -> "SqrtBox: with option"
+]
 
 Test[
 	RadicalBox["\[Pi]", "\[Pi]"] // tmpBoxesToString
 	,
-	"\\mmaRadical{\\pi}{\\(\\pi\\)}"
+	"\\mmaRadical{\\(\\pi\\)}{\\(\\pi\\)}"
 	,
 	TestID -> "RadicalBox: math mode"
 ]
@@ -226,6 +348,14 @@ Test[
 	"\\mmaRadical{\\mmaRadical{a}{b}}{\\mmaRadical{c}{d}}"
 	,
 	TestID -> "RadicalBox: nested"
+]
+Test[
+	RadicalBox["x", "\[Zeta]", ExponentPosition -> {0.2, 0.1}] //
+		tmpBoxesToString
+	,
+	"\\mmaRadical{x}{\\(\\zeta\\)}"
+	,
+	TestID -> "RadicalBox: partial math mode, with option"
 ]
 
 If[$VersionNumber >= 10,
